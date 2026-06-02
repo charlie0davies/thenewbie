@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
   const userId = await getUserId(req, res);
   if (!userId) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
-  const body: Omit<UserProfile, "id"> = await req.json();
-  const profile: UserProfile = { ...body, id: userId };
+  const body: Omit<UserProfile, "userId"> = await req.json();
+  const profile: UserProfile = { ...body, userId };
   await putUser(profile);
   return NextResponse.json({ ok: true });
 }

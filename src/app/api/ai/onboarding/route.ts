@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   const carbsG = Math.round((targetCalories - proteinG * 4 - fatG * 9) / 4);
 
   const profile: UserProfile = {
-    id: userId, name, email, gender, age, heightCm, weightKg, goal, experience, workoutType,
+    userId, name, email, gender, age, heightCm, weightKg, goal, experience, workoutType,
     workoutDays: workoutDays.sort((a: number, b: number) => a - b),
     createdAt: new Date().toISOString(),
   };

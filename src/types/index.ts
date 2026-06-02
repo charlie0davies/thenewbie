@@ -6,7 +6,7 @@ export type ExperienceLevel = "complete_beginner" | "some_experience" | "interme
 export type WorkoutType = "gym" | "home" | "both";
 
 export interface UserProfile {
-  id: string;
+  userId: string;
   name: string;
   email: string;
   gender: Gender;
