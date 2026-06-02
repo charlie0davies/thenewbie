@@ -8,7 +8,7 @@ import { saveShoppingList } from "@/lib/db/shopping";
 import { calculateTDEE } from "@/lib/utils";
 import type { UserProfile } from "@/types";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 async function getUserId(req: NextRequest) {
   const res = NextResponse.next();
@@ -21,12 +21,45 @@ async function getUserId(req: NextRequest) {
   });
 }
 
+function parseJSON(raw: string, label: string) {
+  let text = raw.trim();
+
+  // Strip markdown code fences
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) {
+    text = fence[1].trim();
+  } else {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start !== -1 && end !== -1) text = text.slice(start, end + 1);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error(`[onboarding] Failed to parse ${label}. stop_reason may be max_tokens.`);
+    console.error(`[onboarding] Raw tail (last 300 chars):`, raw.slice(-300));
+    throw err;
+  }
+}
+
+async function callClaude(client: Anthropic, prompt: string) {
+  const msg = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  if (msg.stop_reason === "max_tokens") {
+    throw new Error("Response was cut short (max_tokens). Retrying with a smaller request.");
+  }
+
+  return (msg.content[0] as { type: string; text: string }).text;
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
   }
 
   const userId = await getUserId(req);
@@ -44,160 +77,149 @@ export async function POST(req: NextRequest) {
   const targetCalories =
     goal === "lose_weight" ? tdee - 400 :
     goal === "build_muscle" ? tdee + 250 : tdee;
+  const proteinG = Math.round(weightKg * 2);
+  const fatG = Math.round((targetCalories * 0.25) / 9);
+  const carbsG = Math.round((targetCalories - proteinG * 4 - fatG * 9) / 4);
 
   const profile: UserProfile = {
-    id: userId,
-    name, email, gender, age, heightCm, weightKg,
-    goal, experience, workoutType,
+    id: userId, name, email, gender, age, heightCm, weightKg, goal, experience, workoutType,
     workoutDays: workoutDays.sort((a: number, b: number) => a - b),
     createdAt: new Date().toISOString(),
   };
   await putUser(profile);
 
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const workoutDayNames = workoutDays.map((d: number) => dayNames[d]).join(", ");
-
-  const prompt = `You are an expert personal trainer and nutritionist creating a beginner fitness plan.
-
-USER PROFILE:
-- Name: ${name}
-- Gender: ${gender}, Age: ${age}
-- Height: ${heightCm}cm, Weight: ${weightKg}kg
-- Goal: ${goal}
-- Experience: ${experience}
-- Workout type: ${workoutType}
-- Workout days: ${workoutDayNames} (${workoutDays.length} days/week)
-- TDEE: ${tdee} kcal/day, Target calories: ${targetCalories} kcal/day
-- Dietary restrictions: ${dietaryRestrictions?.join(", ") || "none"}
-- Liked foods: ${likedFoods || "no preference"}
-- Disliked foods: ${dislikedFoods || "none"}
-- Meal simplicity preference: ${mealSimplicity} (1=very simple, 5=elaborate)
-- Cooking skill: ${cookingSkill}
-
-Return ONLY valid JSON (no markdown, no explanation) in this exact structure:
-
-{
-  "workoutPlan": {
-    "weeklyRoutine": [
-      {
-        "dayOfWeek": <0-6 where 0=Sun>,
-        "isWorkoutDay": <true|false>,
-        "exercises": [
-          {
-            "id": "<snake_case_unique_id>",
-            "name": "<exercise name>",
-            "muscleGroup": "<primary muscle>",
-            "sets": <number>,
-            "reps": "<e.g. 8-12 or 30 sec>",
-            "restSeconds": <number>,
-            "startingWeightKg": <number, use 0 for bodyweight>,
-            "notes": "<beginner tip>"
-          }
-        ]
-      }
-    ]
-  },
-  "mealPlan": {
-    "dailyCalories": ${targetCalories},
-    "dailyProteinG": <number>,
-    "dailyCarbsG": <number>,
-    "dailyFatG": <number>,
-    "dailyWaterMl": <number>,
-    "proteinShakesPerDay": <0 or 1>,
-    "mealTemplates": [
-      {
-        "id": "<unique_id>",
-        "name": "<meal name>",
-        "time": "<breakfast|lunch|dinner|snack>",
-        "ingredients": [
-          { "name": "<ingredient>", "amountG": <number>, "unit": "<g|ml|tbsp|tsp|piece>" }
-        ],
-        "calories": <number>,
-        "proteinG": <number>,
-        "carbsG": <number>,
-        "fatG": <number>,
-        "prepMinutes": <number>
-      }
-    ]
-  },
-  "shoppingList": {
-    "weekStartDate": "${new Date().toISOString().slice(0, 10)}",
-    "items": [
-      {
-        "id": "<unique_id>",
-        "name": "<item name>",
-        "category": "<Proteins|Dairy|Produce|Grains|Condiments|Supplements>",
-        "quantity": "<e.g. 500g, 1 dozen, 2 litres>",
-        "estimatedCostGbp": <number>,
-        "buyByDate": "<YYYY-MM-DD or null>",
-        "tescoUrl": "https://www.tesco.com/groceries/en-GB/search?query=<url-encoded-name>",
-        "asdaUrl": "https://groceries.asda.com/search/<url-encoded-name>",
-        "morrisonsUrl": "https://groceries.morrisons.com/search?entry=<url-encoded-name>",
-        "waitroseUrl": "https://www.waitrose.com/ecom/shop/search?searchTerm=<url-encoded-name>"
-      }
-    ]
-  }
-}
-
-Rules:
-- Keep it beginner-friendly with clear exercise names and tips
-- 4-6 exercises per workout day, full body or push/pull/legs
-- 3-4 meals per day, realistic for UK shopping
-- Shopping list covers one full week
-- Supermarket search URLs must use the actual item name URL-encoded
-- Meal ingredients must be specific and measurable`;
+  const workoutDayNums: number[] = workoutDays;
+  const workoutDayNames = workoutDayNums.map((d) => dayNames[d]).join(", ");
+  const allDays = [0, 1, 2, 3, 4, 5, 6];
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    messages: [{ role: "user", content: prompt }],
-  });
+  // ── Call 1: Workout plan ──────────────────────────────────────────────────
 
-  const raw = (message.content[0] as { type: string; text: string }).text;
+  const workoutPrompt = `You are a personal trainer. Create a beginner workout plan as JSON only — no markdown, no explanation.
 
-  // Strip markdown code fences if Claude wraps the response
-  let jsonText = raw.trim();
-  const fenceMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenceMatch) {
-    jsonText = fenceMatch[1].trim();
-  } else {
-    // Find first { to last } in case there's any leading/trailing text
-    const start = jsonText.indexOf("{");
-    const end = jsonText.lastIndexOf("}");
-    if (start !== -1 && end !== -1) jsonText = jsonText.slice(start, end + 1);
-  }
+Profile: ${gender}, age ${age}, ${heightCm}cm, ${weightKg}kg, goal: ${goal}, experience: ${experience}, equipment: ${workoutType}.
+Workout days (0=Sun): ${workoutDayNames}. Rest days: the others.
 
-  let plan: ReturnType<typeof JSON.parse>;
+Return ONLY this JSON (all 7 days must be included):
+{
+  "weeklyRoutine": [
+    {
+      "dayOfWeek": <0-6>,
+      "isWorkoutDay": <true|false>,
+      "exercises": [
+        {
+          "id": "<unique_snake_case>",
+          "name": "<exercise>",
+          "muscleGroup": "<muscle>",
+          "sets": <2-4>,
+          "reps": "<e.g. 8-12>",
+          "restSeconds": <60-120>,
+          "startingWeightKg": <0 for bodyweight>,
+          "notes": "<one beginner tip>"
+        }
+      ]
+    }
+  ]
+}
+
+Rules: 4-5 exercises on workout days, empty array on rest days. Beginner-appropriate weights.`;
+
+  // ── Call 2: Meal plan ─────────────────────────────────────────────────────
+
+  const mealPrompt = `You are a nutritionist. Create a UK meal plan as JSON only — no markdown, no explanation.
+
+Profile: ${gender}, age ${age}, goal: ${goal}. Daily targets: ${targetCalories} kcal, ${proteinG}g protein, ${carbsG}g carbs, ${fatG}g fat.
+Restrictions: ${dietaryRestrictions?.join(", ") || "none"}. Likes: ${likedFoods || "anything"}. Dislikes: ${dislikedFoods || "none"}.
+Simplicity: ${mealSimplicity}/5. Cooking skill: ${cookingSkill}.
+
+Return ONLY this JSON (3 meals + optional snack):
+{
+  "dailyCalories": ${targetCalories},
+  "dailyProteinG": ${proteinG},
+  "dailyCarbsG": ${carbsG},
+  "dailyFatG": ${fatG},
+  "dailyWaterMl": 2500,
+  "proteinShakesPerDay": ${goal === "build_muscle" ? 1 : 0},
+  "mealTemplates": [
+    {
+      "id": "<unique_id>",
+      "name": "<meal name>",
+      "time": "<breakfast|lunch|dinner|snack>",
+      "ingredients": [
+        { "name": "<ingredient>", "amountG": <number>, "unit": "<g|ml|tbsp|piece>" }
+      ],
+      "calories": <number>,
+      "proteinG": <number>,
+      "carbsG": <number>,
+      "fatG": <number>,
+      "prepMinutes": <number>
+    }
+  ]
+}
+
+Rules: realistic UK ingredients, totals must roughly match daily targets, max 6 ingredients per meal.`;
+
+  // ── Call 3: Shopping list ─────────────────────────────────────────────────
+
+  const shoppingPrompt = `You are a UK nutritionist. Create a one-week shopping list as JSON only — no markdown, no explanation.
+
+The weekly meal plan has these daily meals: breakfast, lunch, dinner${goal === "build_muscle" ? ", protein shake" : ""}.
+Dietary restrictions: ${dietaryRestrictions?.join(", ") || "none"}. Cooking skill: ${cookingSkill}.
+
+Return ONLY this JSON (10-18 items covering a full week):
+{
+  "weekStartDate": "${new Date().toISOString().slice(0, 10)}",
+  "items": [
+    {
+      "id": "<unique_id>",
+      "name": "<item>",
+      "category": "<Proteins|Dairy|Produce|Grains|Condiments|Supplements>",
+      "quantity": "<e.g. 1kg, 6 pack, 500ml>",
+      "estimatedCostGbp": <number like 2.50>,
+      "buyByDate": null,
+      "tescoUrl": "https://www.tesco.com/groceries/en-GB/search?query=${encodeURIComponent("<item name>")}",
+      "asdaUrl": "https://groceries.asda.com/search/<item-name-hyphenated>",
+      "morrisonsUrl": "https://groceries.morrisons.com/search?entry=<item+name+encoded>",
+      "waitroseUrl": "https://www.waitrose.com/ecom/shop/search?searchTerm=<item+name+encoded>"
+    }
+  ]
+}
+
+Rules: each URL must use the actual item name encoded for that retailer's search format. Realistic UK prices.`;
+
   try {
-    plan = JSON.parse(jsonText);
-  } catch {
-    console.error("Failed to parse AI response:", raw.slice(0, 500));
-    return NextResponse.json(
-      { error: "AI returned an unexpected format. Please try again." },
-      { status: 500 }
-    );
+    const [workoutRaw, mealRaw, shoppingRaw] = await Promise.all([
+      callClaude(client, workoutPrompt),
+      callClaude(client, mealPrompt),
+      callClaude(client, shoppingPrompt),
+    ]);
+
+    const workoutPlan = parseJSON(workoutRaw, "workout");
+    const mealPlan = parseJSON(mealRaw, "meal");
+    const shoppingList = parseJSON(shoppingRaw, "shopping");
+
+    // Ensure all 7 days are present (fill any missing as rest days)
+    const existingDays = new Set((workoutPlan.weeklyRoutine as { dayOfWeek: number }[]).map((d) => d.dayOfWeek));
+    for (const d of allDays) {
+      if (!existingDays.has(d)) {
+        workoutPlan.weeklyRoutine.push({ dayOfWeek: d, isWorkoutDay: false, exercises: [] });
+      }
+    }
+    workoutPlan.weeklyRoutine.sort((a: { dayOfWeek: number }, b: { dayOfWeek: number }) => a.dayOfWeek - b.dayOfWeek);
+
+    await saveActivePlan({ userId, planId: "active-workout", createdAt: new Date().toISOString(), ...workoutPlan }, "workout");
+    await saveActivePlan({ userId, planId: "active-meal", createdAt: new Date().toISOString(), ...mealPlan }, "meal");
+    await saveShoppingList({
+      userId, listId: "active", createdAt: new Date().toISOString(),
+      totalEstimatedCostGbp: (shoppingList.items as { estimatedCostGbp: number }[]).reduce((s, i) => s + i.estimatedCostGbp, 0),
+      ...shoppingList,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Plan generation failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-
-  await saveActivePlan(
-    { userId, planId: "active-workout", createdAt: new Date().toISOString(), ...plan.workoutPlan },
-    "workout"
-  );
-  await saveActivePlan(
-    { userId, planId: "active-meal", createdAt: new Date().toISOString(), ...plan.mealPlan },
-    "meal"
-  );
-  await saveShoppingList({
-    userId,
-    listId: "active",
-    createdAt: new Date().toISOString(),
-    totalEstimatedCostGbp: plan.shoppingList.items.reduce(
-      (sum: number, i: { estimatedCostGbp: number }) => sum + i.estimatedCostGbp,
-      0
-    ),
-    ...plan.shoppingList,
-  });
-
-  return NextResponse.json({ ok: true, plan });
 }
