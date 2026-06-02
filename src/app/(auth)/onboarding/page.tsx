@@ -345,8 +345,18 @@ export default function OnboardingPage() {
       clearInterval(interval);
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Plan generation failed");
+        // Safely parse error — server might return non-JSON on crash
+        let errMsg = `Server error ${res.status}`;
+        try {
+          const contentType = res.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            const body = await res.json();
+            errMsg = body.error || errMsg;
+          } else {
+            errMsg = await res.text().then((t) => t.slice(0, 200)) || errMsg;
+          }
+        } catch { /* leave default message */ }
+        throw new Error(errMsg);
       }
 
       router.push("/today");

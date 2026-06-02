@@ -58,6 +58,8 @@ async function callClaude(client: Anthropic, prompt: string) {
 }
 
 export async function POST(req: NextRequest) {
+  // Top-level catch — every code path must return JSON
+  try {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
   }
@@ -220,6 +222,14 @@ Rules: each URL must use the actual item name encoded for that retailer's search
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Plan generation failed";
+    console.error("[onboarding] inner catch:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+
+  } catch (err: unknown) {
+    // Top-level safety net — ensures we always return JSON
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[onboarding] top-level catch:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
