@@ -6,6 +6,7 @@ import { putUser } from "@/lib/db/users";
 import { saveActivePlan } from "@/lib/db/plans";
 import { saveShoppingList } from "@/lib/db/shopping";
 import { calculateTDEE } from "@/lib/utils";
+import { buildMealPrompt } from "@/lib/ai/mealPrompt";
 import type { UserProfile } from "@/types";
 
 export const maxDuration = 120;
@@ -132,71 +133,20 @@ Return ONLY this JSON (all 7 days must be included):
 
 Rules: 4-5 exercises on workout days, empty array on rest days. Beginner-appropriate weights.`;
 
-  // ── Call 2: Meal plan (workout day + rest day meals) ─────────────────────
+  // ── Call 2: Meal plan (3 workout variants + 2 rest variants) ─────────────
 
-  const restCalories = Math.round(targetCalories * 0.88); // ~12% fewer on rest days
-  const restCarbsG = Math.round(carbsG * 0.75);           // less carbs on rest days
-  const extraContext = body.extraContext ? `\nExtra info from user: ${body.extraContext}` : "";
+  const restCalories = Math.round(targetCalories * 0.88);
+  const restCarbsG = Math.round(carbsG * 0.75);
 
-  const mealPrompt = `You are a nutritionist. Create a UK meal plan as JSON only — no markdown, no explanation.
-
-Profile: ${gender}, age ${age}, goal: ${goal}.
-WORKOUT day targets: ${targetCalories} kcal, ${proteinG}g protein, ${carbsG}g carbs, ${fatG}g fat.
-REST day targets: ${restCalories} kcal, ${proteinG}g protein, ${restCarbsG}g carbs, ${fatG}g fat (fewer carbs, same protein).
-Restrictions: ${dietaryRestrictions?.join(", ") || "none"}. Likes: ${likedFoods || "anything"}. Dislikes: ${dislikedFoods || "none"}.
-Simplicity: ${mealSimplicity}/5. Cooking skill: ${cookingSkill}.${extraContext}
-
-Return ONLY this JSON. Each array must have 3-4 meals. IDs must be unique across both arrays:
-{
-  "dailyCalories": ${targetCalories},
-  "dailyProteinG": ${proteinG},
-  "dailyCarbsG": ${carbsG},
-  "dailyFatG": ${fatG},
-  "restDayCalories": ${restCalories},
-  "restDayProteinG": ${proteinG},
-  "restDayCarbsG": ${restCarbsG},
-  "restDayFatG": ${fatG},
-  "dailyWaterMl": 2500,
-  "proteinShakesPerDay": ${goal === "build_muscle" ? 1 : 0},
-  "mealTemplates": [],
-  "workoutDayMeals": [
-    {
-      "id": "wd_<unique>",
-      "name": "<meal name>",
-      "time": "<breakfast|lunch|dinner|snack>",
-      "ingredients": [{ "name": "<ingredient>", "amountG": <number>, "unit": "<g|ml|tbsp|piece>" }],
-      "calories": <number>,
-      "proteinG": <number>,
-      "carbsG": <number>,
-      "fatG": <number>,
-      "prepMinutes": <number>
-    }
-  ],
-  "restDayMeals": [
-    {
-      "id": "rd_<unique>",
-      "name": "<meal name>",
-      "time": "<breakfast|lunch|dinner|snack>",
-      "ingredients": [{ "name": "<ingredient>", "amountG": <number>, "unit": "<g|ml|tbsp|piece>" }],
-      "calories": <number>,
-      "proteinG": <number>,
-      "carbsG": <number>,
-      "fatG": <number>,
-      "prepMinutes": <number>
-    }
-  ]
-}
-
-UNIT RULES — use natural units, not grams, for:
-- Eggs → amountG = count (e.g. 2 eggs: amountG: 2, unit: "piece")
-- Bread/toast → amountG = slice count, unit: "slice"
-- Whole fruits (banana, apple, orange) → amountG: 1, unit: "piece"
-- Oils, butter, honey, sauces → amountG = tbsp count, unit: "tbsp"
-- Spices, small seasonings → amountG = tsp count, unit: "tsp"
-- Liquids → unit: "ml"
-- Everything else → unit: "g"
-
-Other rules: realistic UK ingredients, max 6 ingredients per meal. workoutDayMeals should be higher carb/protein to fuel training. restDayMeals should be lighter and more varied. Both sets must match their respective calorie targets.`;
+  const mealPrompt = buildMealPrompt({
+    gender, age, goal, targetCalories, proteinG, carbsG, fatG,
+    restCalories, restCarbsG,
+    weekStartDate: new Date().toISOString().slice(0, 10),
+    dietaryRestrictions, likedFoods, dislikedFoods,
+    mealSimplicity, cookingSkill,
+    extraContext: body.extraContext,
+    proteinShakes: goal === "build_muscle" ? 1 : 0,
+  });
 
   // ── Call 3: Shopping list ─────────────────────────────────────────────────
 

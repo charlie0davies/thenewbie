@@ -43,9 +43,11 @@ export interface MealPlan {
   restDayFatG?: number;
   dailyWaterMl: number;
   proteinShakesPerDay: number;
-  mealTemplates: MealTemplate[];       // legacy fallback
-  workoutDayMeals?: MealTemplate[];    // meals for training days
-  restDayMeals?: MealTemplate[];       // lighter meals for rest days
+  mealTemplates: MealTemplate[];           // v1 — same every day (fallback)
+  workoutDayMeals?: MealTemplate[];        // v2 — single workout template
+  restDayMeals?: MealTemplate[];           // v2 — single rest template
+  workoutDayVariants?: MealTemplate[][];   // v3 — multiple workout variants (preferred)
+  restDayVariants?: MealTemplate[][];      // v3 — multiple rest variants (preferred)
 }
 
 export interface MealTemplate {

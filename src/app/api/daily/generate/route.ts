@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAuthSession } from "aws-amplify/auth/server";
 import { runWithAmplifyServerContext } from "@/lib/auth/amplify-server";
-import { getActivePlan, WorkoutPlan, MealPlan } from "@/lib/db/plans";
-
-const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+import { getActivePlan, WorkoutPlan, MealPlan, MealTemplate } from "@/lib/db/plans";
 import { getDailyRecord, putDailyRecord, DailyRecord, DailyPlanItem } from "@/lib/db/daily";
+
+const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 async function getUserId(req: NextRequest) {
   const res = NextResponse.next();
@@ -24,12 +24,49 @@ const MEAL_TIMES: Record<string, string> = {
   dinner: "18:30",
 };
 
+/**
+ * Pick a meal variant for a given day.
+ * We rotate through variants based on how many workout/rest days have passed
+ * in the week so each day genuinely gets different meals.
+ */
+function pickVariant(
+  variants: MealTemplate[][],
+  dayOfWeek: number,
+  allDaysOfType: number[]
+): MealTemplate[] {
+  if (!variants?.length) return [];
+  const position = allDaysOfType.sort((a, b) => a - b).indexOf(dayOfWeek);
+  const idx = position >= 0 ? position % variants.length : dayOfWeek % variants.length;
+  return variants[idx] ?? variants[0];
+}
+
+/** Resolve which meals to show for a given day, using v3 variants first */
+function resolveMeals(
+  mealPlan: MealPlan,
+  dayOfWeek: number,
+  isWorkoutDay: boolean,
+  allWorkoutDays: number[],
+  allRestDays: number[]
+): MealTemplate[] {
+  // v3 — variants (preferred: gives real daily variety)
+  if (isWorkoutDay && mealPlan.workoutDayVariants?.length) {
+    return pickVariant(mealPlan.workoutDayVariants, dayOfWeek, allWorkoutDays);
+  }
+  if (!isWorkoutDay && mealPlan.restDayVariants?.length) {
+    return pickVariant(mealPlan.restDayVariants, dayOfWeek, allRestDays);
+  }
+  // v2 — single template per type
+  if (isWorkoutDay && mealPlan.workoutDayMeals?.length) return mealPlan.workoutDayMeals;
+  if (!isWorkoutDay && mealPlan.restDayMeals?.length) return mealPlan.restDayMeals;
+  // v1 — same every day
+  return mealPlan.mealTemplates ?? [];
+}
+
 export async function POST(req: NextRequest) {
   try {
     const userId = await getUserId(req);
     if (!userId) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
-    // Accept an optional date override, otherwise use today
     let date: string;
     try {
       const body = await req.json();
@@ -51,19 +88,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No meal plan found" }, { status: 404 });
     }
 
-    const items: DailyPlanItem[] = [];
-
-    // Pick workout vs rest day meals
     const dayOfWeek = new Date(date + "T12:00:00").getDay();
-    const dayRoutineForMeals = workoutPlan?.weeklyRoutine?.find((d) => d.dayOfWeek === dayOfWeek);
-    const isWorkoutDay = dayRoutineForMeals?.isWorkoutDay ?? false;
+    const dayRoutine = workoutPlan?.weeklyRoutine?.find((d) => d.dayOfWeek === dayOfWeek);
+    const isWorkoutDay = dayRoutine?.isWorkoutDay ?? false;
 
-    const mealSource =
-      isWorkoutDay && mealPlan.workoutDayMeals?.length
-        ? mealPlan.workoutDayMeals
-        : !isWorkoutDay && mealPlan.restDayMeals?.length
-        ? mealPlan.restDayMeals
-        : mealPlan.mealTemplates || [];
+    // Build lists of all workout/rest days so we can pick the right variant index
+    const allWorkoutDays = workoutPlan?.weeklyRoutine
+      ?.filter((d) => d.isWorkoutDay)
+      .map((d) => d.dayOfWeek) ?? [];
+    const allRestDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !allWorkoutDays.includes(d));
+
+    const mealSource = resolveMeals(mealPlan, dayOfWeek, isWorkoutDay, allWorkoutDays, allRestDays);
+
+    const items: DailyPlanItem[] = [];
 
     const mealOrder = ["breakfast", "lunch", "snack", "dinner"];
     const sorted = [...mealSource].sort(
@@ -84,26 +121,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Add workout exercises if today is a workout day (reuse dayRoutineForMeals)
-    if (workoutPlan) {
-      const dayRoutine = dayRoutineForMeals;
-      if (dayRoutine?.isWorkoutDay) {
-        for (const ex of dayRoutine.exercises) {
-          items.push({
-            id: `exercise-${ex.id}-${date}`,
-            type: "exercise",
-            label: ex.name,
-            detail: ex.muscleGroup,
-            completed: false,
-            sets: ex.sets,
-            reps: ex.reps,
-            weightKg: ex.startingWeightKg,
-          });
-        }
+    // Workout exercises
+    if (dayRoutine?.isWorkoutDay) {
+      for (const ex of dayRoutine.exercises) {
+        items.push({
+          id: `exercise-${ex.id}-${date}`,
+          type: "exercise",
+          label: ex.name,
+          detail: ex.muscleGroup,
+          completed: false,
+          sets: ex.sets,
+          reps: ex.reps,
+          weightKg: ex.startingWeightKg,
+        });
       }
     }
 
-    // Add protein shake if prescribed
     if (mealPlan.proteinShakesPerDay > 0) {
       items.push({
         id: `shake-${date}`,
@@ -115,6 +148,10 @@ export async function POST(req: NextRequest) {
         calories: 150,
       });
     }
+
+    const targetCals = isWorkoutDay
+      ? mealPlan.dailyCalories
+      : mealPlan.restDayCalories ?? mealPlan.dailyCalories;
 
     const record: DailyRecord = {
       userId,
