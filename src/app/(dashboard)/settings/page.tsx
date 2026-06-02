@@ -54,7 +54,7 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <Header title="Settings" />
+      <Header title="Account" subtitle="Manage your account and plan" />
       <div className="px-4 flex flex-col gap-4">
 
         {/* Account info */}

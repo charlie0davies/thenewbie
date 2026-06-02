@@ -13,7 +13,7 @@ const nav = [
   { href: "/progress", icon: TrendingUp, label: "Progress" },
   { href: "/shopping", icon: ShoppingCart, label: "Shopping" },
   { href: "/coach", icon: MessageCircle, label: "AI Coach" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+  { href: "/settings", icon: Settings, label: "Account" },
 ];
 
 export default function Sidebar() {
