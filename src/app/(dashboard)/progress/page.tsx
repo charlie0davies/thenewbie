@@ -5,214 +5,369 @@ import Header from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { TrendingUp, TrendingDown, Minus, Scale } from "lucide-react";
+import { cn, formatWeight, formatCurrency } from "@/lib/utils";
+import { TrendingUp, TrendingDown, Minus, Scale, Flame, Dumbbell, Target } from "lucide-react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
 } from "recharts";
 import type { WeightEntry } from "@/lib/db/progress";
-import { formatWeight } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 
-export default function ProgressPage() {
+type Tab = "weight" | "nutrition" | "strength" | "projections";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "weight", label: "Weight" },
+  { id: "nutrition", label: "Nutrition" },
+  { id: "strength", label: "Strength" },
+  { id: "projections", label: "Projections" },
+];
+
+// ─── Weight tab ───────────────────────────────────────────────────────────────
+
+function WeightTab() {
   const [weights, setWeights] = useState<WeightEntry[]>([]);
   const [newWeight, setNewWeight] = useState("");
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch("/api/progress?type=weight")
       .then((r) => r.json())
-      .then((data: WeightEntry[]) => {
-        setWeights(Array.isArray(data) ? data.reverse() : []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      .then((d: WeightEntry[]) => setWeights(Array.isArray(d) ? d.reverse() : []));
   }, []);
 
-  async function handleLogWeight() {
+  async function handleLog() {
     if (!newWeight) return;
     setSaving(true);
     await fetch("/api/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "weight",
-        weightKg: Number(newWeight),
-      }),
+      body: JSON.stringify({ type: "weight", weightKg: Number(newWeight) }),
     });
     const entry: WeightEntry = {
-      userId: "",
-      sortKey: `WEIGHT#${new Date().toISOString()}`,
-      type: "weight",
-      date: new Date().toISOString().slice(0, 10),
-      weightKg: Number(newWeight),
+      userId: "", sortKey: `WEIGHT#${new Date().toISOString()}`,
+      type: "weight", date: new Date().toISOString().slice(0, 10), weightKg: Number(newWeight),
     };
-    setWeights((prev) => [...prev, entry]);
+    setWeights((p) => [...p, entry]);
     setNewWeight("");
     setSaving(false);
   }
 
-  const chartData = weights.map((w) => ({
-    date: format(parseISO(w.date), "d MMM"),
-    weight: w.weightKg,
-  }));
-
   const latest = weights[weights.length - 1];
   const previous = weights[weights.length - 2];
   const diff = latest && previous ? latest.weightKg - previous.weightKg : null;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const chartData = weights.map((w) => ({ date: format(parseISO(w.date), "d MMM"), weight: w.weightKg }));
 
   return (
-    <div>
-      <Header title="Progress" subtitle="Track your body weight" />
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader><CardTitle>Log today&apos;s weight</CardTitle></CardHeader>
+        <div className="flex gap-3">
+          <Input type="number" inputMode="decimal" placeholder="e.g. 74.5" value={newWeight}
+            onChange={(e) => setNewWeight(e.target.value)} hint="kg" className="flex-1" />
+          <Button onClick={handleLog} loading={saving} disabled={!newWeight} size="md" className="shrink-0">Log</Button>
+        </div>
+      </Card>
 
-      <div className="px-4 flex flex-col gap-4">
-        {/* Log weight */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Log today&apos;s weight</CardTitle>
-          </CardHeader>
-          <div className="flex gap-3">
-            <Input
-              type="number"
-              inputMode="decimal"
-              placeholder="e.g. 74.5"
-              value={newWeight}
-              onChange={(e) => setNewWeight(e.target.value)}
-              hint="kg"
-              className="flex-1"
-            />
-            <Button
-              onClick={handleLogWeight}
-              loading={saving}
-              disabled={!newWeight}
-              size="md"
-              className="shrink-0"
-            >
-              Log
-            </Button>
-          </div>
-        </Card>
-
-        {/* Stats */}
-        {latest && (
-          <div className="flex gap-3">
+      {latest && (
+        <div className="flex gap-3">
+          <Card className="flex-1 text-center">
+            <div className="flex items-center justify-center gap-1 mb-1"><Scale size={14} className="text-primary" /><span className="text-xs text-muted-foreground">Current</span></div>
+            <p className="text-2xl font-bold">{formatWeight(latest.weightKg)}</p>
+          </Card>
+          {diff !== null && (
             <Card className="flex-1 text-center">
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <Scale size={14} className="text-primary" />
-                <span className="text-xs text-muted-foreground">Current</span>
+              <div className="flex items-center justify-center gap-1 mb-1">
+                {diff < 0 ? <TrendingDown size={14} className="text-green-500" /> : diff > 0 ? <TrendingUp size={14} className="text-destructive" /> : <Minus size={14} />}
+                <span className="text-xs text-muted-foreground">Change</span>
               </div>
-              <p className="text-2xl font-bold">{formatWeight(latest.weightKg)}</p>
+              <p className={cn("text-2xl font-bold", diff < 0 ? "text-green-500" : diff > 0 ? "text-destructive" : "")}>
+                {diff > 0 ? "+" : ""}{diff.toFixed(1)} kg
+              </p>
             </Card>
-            {diff !== null && (
-              <Card className="flex-1 text-center">
-                <div className="flex items-center justify-center gap-1.5 mb-1">
-                  {diff < 0 ? (
-                    <TrendingDown size={14} className="text-primary" />
-                  ) : diff > 0 ? (
-                    <TrendingUp size={14} className="text-destructive" />
-                  ) : (
-                    <Minus size={14} className="text-muted-foreground" />
-                  )}
-                  <span className="text-xs text-muted-foreground">Change</span>
-                </div>
-                <p
-                  className={`text-2xl font-bold ${
-                    diff < 0 ? "text-primary" : diff > 0 ? "text-destructive" : ""
-                  }`}
-                >
-                  {diff > 0 ? "+" : ""}
-                  {diff.toFixed(1)} kg
-                </p>
-              </Card>
-            )}
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {/* Chart */}
-        {chartData.length > 1 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Weight over time</CardTitle>
-            </CardHeader>
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={chartData}>
+      {chartData.length > 1 ? (
+        <Card>
+          <CardHeader><CardTitle>Weight over time</CardTitle></CardHeader>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+              <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={35} />
+              <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }} />
+              <Line type="monotone" dataKey="weight" stroke="#f97316" strokeWidth={2} dot={{ fill: "#f97316", r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      ) : (
+        <Card className="text-center py-6"><p className="text-muted-foreground text-sm">Log at least 2 weights to see your chart.</p></Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Nutrition tab ────────────────────────────────────────────────────────────
+
+interface NutritionDay { date: string; calories: number; proteinG: number; carbsG: number; fatG: number; }
+
+function NutritionTab() {
+  const [data, setData] = useState<NutritionDay[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/progress/summary")
+      .then((r) => r.json())
+      .then((d) => { setData(d.nutrition || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+
+  if (!data.length) return (
+    <Card className="text-center py-8">
+      <Flame size={32} className="text-muted-foreground mx-auto mb-3" />
+      <p className="text-muted-foreground text-sm">Tick off meals on your Today page to start tracking nutrition.</p>
+    </Card>
+  );
+
+  const chartData = data.map((d) => ({ date: format(parseISO(d.date), "d MMM"), calories: d.calories, protein: d.proteinG, carbs: d.carbsG, fat: d.fatG }));
+  const avgCals = Math.round(data.reduce((s, d) => s + d.calories, 0) / data.length);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="text-center">
+        <p className="text-xs text-muted-foreground mb-1">Avg daily calories (logged)</p>
+        <p className="text-3xl font-bold text-primary">{avgCals}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">kcal</p>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Daily calories</CardTitle></CardHeader>
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={35} />
+            <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }} />
+            <Bar dataKey="calories" fill="#f97316" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Macros over time</CardTitle></CardHeader>
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={30} />
+            <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Line type="monotone" dataKey="protein" stroke="#22c55e" strokeWidth={2} dot={false} name="Protein (g)" />
+            <Line type="monotone" dataKey="carbs" stroke="#f59e0b" strokeWidth={2} dot={false} name="Carbs (g)" />
+            <Line type="monotone" dataKey="fat" stroke="#3b82f6" strokeWidth={2} dot={false} name="Fat (g)" />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Strength tab ─────────────────────────────────────────────────────────────
+
+function StrengthTab() {
+  const [exercises, setExercises] = useState<Record<string, { date: string; maxWeightKg: number }[]>>({});
+  const [selected, setSelected] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/progress/summary")
+      .then((r) => r.json())
+      .then((d) => {
+        setExercises(d.exercises || {});
+        const keys = Object.keys(d.exercises || {});
+        if (keys.length) setSelected(keys[0]);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+
+  const exerciseNames = Object.keys(exercises);
+  if (!exerciseNames.length) return (
+    <Card className="text-center py-8">
+      <Dumbbell size={32} className="text-muted-foreground mx-auto mb-3" />
+      <p className="text-muted-foreground text-sm">Log sets on the Workout page to track your strength progress.</p>
+    </Card>
+  );
+
+  const chartData = (exercises[selected] || []).map((e) => ({
+    date: format(parseISO(e.date), "d MMM"),
+    weight: e.maxWeightKg,
+  }));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-2">
+        {exerciseNames.map((name) => (
+          <button key={name} onClick={() => setSelected(name)}
+            className={cn("px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
+              selected === name ? "bg-primary border-primary text-white" : "bg-white border-border text-muted-foreground"
+            )}
+          >{name}</button>
+        ))}
+      </div>
+
+      {chartData.length > 1 ? (
+        <Card>
+          <CardHeader><CardTitle>{selected} — max weight</CardTitle></CardHeader>
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={35} unit="kg" />
+              <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }} />
+              <Line type="monotone" dataKey="weight" stroke="#f97316" strokeWidth={2} dot={{ fill: "#f97316", r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      ) : (
+        <Card className="text-center py-6"><p className="text-muted-foreground text-sm">Log at least 2 sessions to see a chart.</p></Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Projections tab ──────────────────────────────────────────────────────────
+
+function ProjectionsTab() {
+  const [user, setUser] = useState<{ weightKg: number; targetWeightKg?: number; goal: string; workoutDays: number[] } | null>(null);
+  const [weights, setWeights] = useState<WeightEntry[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/user").then((r) => r.json()),
+      fetch("/api/progress?type=weight").then((r) => r.json()),
+    ]).then(([u, w]) => {
+      setUser(u);
+      setWeights(Array.isArray(w) ? w.reverse() : []);
+    });
+  }, []);
+
+  if (!user) return <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+
+  const currentWeight = weights.length ? weights[weights.length - 1].weightKg : user.weightKg;
+  const target = user.targetWeightKg;
+  const weeklyWorkouts = user.workoutDays?.length || 3;
+
+  // Simple projection: ~400 kcal deficit/surplus → ~0.37 kg/week
+  const weeklyChangeKg =
+    user.goal === "lose_weight" ? -0.37 :
+    user.goal === "build_muscle" ? 0.15 : 0;
+
+  const projections = [4, 8, 12].map((weeks) => ({
+    weeks,
+    weight: Math.max(30, currentWeight + weeklyChangeKg * weeks),
+  }));
+
+  const weeksToGoal =
+    target && weeklyChangeKg !== 0
+      ? Math.abs((target - currentWeight) / weeklyChangeKg)
+      : null;
+
+  const totalCalsBurned = weeklyWorkouts * 52 * 300; // ~300 kcal per session estimate
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Projections chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Target size={16} className="text-primary" /> Weight projections</CardTitle>
+        </CardHeader>
+        {weeklyChangeKg !== 0 ? (
+          <>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={[{ label: "Now", weight: currentWeight }, ...projections.map((p) => ({ label: `${p.weeks}w`, weight: p.weight }))]}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10, fill: "#71717a" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  domain={["dataMin - 1", "dataMax + 1"]}
-                  tick={{ fontSize: 10, fill: "#71717a" }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={35}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "#fff",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: "#111827" }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="weight"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  dot={{ fill: "#22c55e", r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                <YAxis domain={["dataMin - 2", "dataMax + 2"]} tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={35} unit="kg" />
+                <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }} />
+                <Line type="monotone" dataKey="weight" stroke="#f97316" strokeWidth={2} strokeDasharray="6 3" dot={{ fill: "#f97316", r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
-          </Card>
-        ) : (
-          <Card className="text-center py-6">
-            <p className="text-muted-foreground text-sm">
-              Log at least 2 weights to see your chart.
-            </p>
-          </Card>
-        )}
-
-        {/* History */}
-        {weights.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>History</CardTitle>
-            </CardHeader>
-            <div className="flex flex-col gap-2">
-              {[...weights].reverse().slice(0, 10).map((w, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-muted-foreground">
-                    {format(parseISO(w.date), "d MMM yyyy")}
-                  </span>
-                  <span className="font-medium">{formatWeight(w.weightKg)}</span>
+            <div className="flex gap-2 mt-3">
+              {projections.map((p) => (
+                <div key={p.weeks} className="flex-1 text-center bg-muted rounded-xl p-2.5">
+                  <p className="text-xs text-muted-foreground">{p.weeks} weeks</p>
+                  <p className="font-bold text-sm">{p.weight.toFixed(1)} kg</p>
                 </div>
               ))}
             </div>
-          </Card>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Projections available for weight loss and muscle building goals.</p>
         )}
+      </Card>
+
+      {/* Target */}
+      {target && weeksToGoal && (
+        <Card className="text-center">
+          <p className="text-xs text-muted-foreground mb-1">Estimated time to reach {formatWeight(target)}</p>
+          <p className="text-3xl font-bold text-primary">{Math.ceil(weeksToGoal)}</p>
+          <p className="text-xs text-muted-foreground">weeks at current pace</p>
+        </Card>
+      )}
+
+      {/* Stats */}
+      <div className="flex gap-3">
+        <Card className="flex-1 text-center">
+          <p className="text-xs text-muted-foreground mb-1">Weekly change</p>
+          <p className="text-xl font-bold">{weeklyChangeKg > 0 ? "+" : ""}{weeklyChangeKg.toFixed(2)} kg</p>
+        </Card>
+        <Card className="flex-1 text-center">
+          <p className="text-xs text-muted-foreground mb-1">Annual cal burn</p>
+          <p className="text-xl font-bold">{(totalCalsBurned / 1000).toFixed(0)}k</p>
+          <p className="text-xs text-muted-foreground">kcal (est.)</p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function ProgressPage() {
+  const [tab, setTab] = useState<Tab>("weight");
+
+  return (
+    <div>
+      <Header title="Progress" />
+
+      {/* Tabs */}
+      <div className="flex gap-1 px-4 pb-4 overflow-x-auto scrollbar-none">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap transition-all",
+              tab === t.id ? "bg-primary border-primary text-white" : "bg-white border-border text-muted-foreground"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="px-4">
+        {tab === "weight" && <WeightTab />}
+        {tab === "nutrition" && <NutritionTab />}
+        {tab === "strength" && <StrengthTab />}
+        {tab === "projections" && <ProjectionsTab />}
       </div>
     </div>
   );

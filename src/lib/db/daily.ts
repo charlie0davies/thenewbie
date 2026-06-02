@@ -15,6 +15,9 @@ export interface DailyPlanItem {
   partialNote?: string;
   scheduledTime?: string; // HH:MM
   calories?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
   sets?: number;
   reps?: string;
   weightKg?: number;

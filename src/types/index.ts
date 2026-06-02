@@ -17,6 +17,7 @@ export interface UserProfile {
   experience: ExperienceLevel;
   workoutType: WorkoutType;
   workoutDays: number[]; // 0=Sun, 1=Mon, ... 6=Sat
+  targetWeightKg?: number;
   createdAt: string;
 }
 

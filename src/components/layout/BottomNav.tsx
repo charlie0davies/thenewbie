@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Dumbbell, UtensilsCrossed, TrendingUp, ShoppingCart, Settings } from "lucide-react";
+import { Home, Dumbbell, UtensilsCrossed, TrendingUp, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -10,8 +10,7 @@ const nav = [
   { href: "/workout", icon: Dumbbell, label: "Workout" },
   { href: "/nutrition", icon: UtensilsCrossed, label: "Nutrition" },
   { href: "/progress", icon: TrendingUp, label: "Progress" },
-  { href: "/shopping", icon: ShoppingCart, label: "Shopping" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+  { href: "/coach", icon: MessageCircle, label: "Coach" },
 ];
 
 export default function BottomNav() {
@@ -22,13 +21,8 @@ export default function BottomNav() {
         {nav.map(({ href, icon: Icon, label }) => {
           const active = pathname.startsWith(href);
           return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl transition-colors",
-                active ? "text-primary" : "text-muted-foreground"
-              )}
+            <Link key={href} href={href}
+              className={cn("flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl transition-colors", active ? "text-primary" : "text-muted-foreground")}
             >
               <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
               <span className="text-[9px] font-medium">{label}</span>

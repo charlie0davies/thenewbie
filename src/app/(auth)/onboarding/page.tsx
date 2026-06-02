@@ -27,6 +27,7 @@ interface FormData {
   // metric
   heightCm: string;
   weightKg: string;
+  targetWeight: string;
   // imperial
   heightFeet: string;
   heightInches: string;
@@ -159,6 +160,7 @@ function StepAbout({ data, set }: { data: FormData; set: (k: keyof FormData, v: 
 }
 
 function StepGoal({ data, set }: { data: FormData; set: (k: keyof FormData, v: unknown) => void }) {
+  const showTarget = data.goal === "lose_weight" || data.goal === "build_muscle";
   return (
     <div className="flex flex-col gap-3">
       {[
@@ -169,6 +171,19 @@ function StepGoal({ data, set }: { data: FormData; set: (k: keyof FormData, v: u
       ].map((g) => (
         <OptionCard key={g.id} {...g} selected={data.goal === g.id} onClick={() => set("goal", g.id)} />
       ))}
+      {showTarget && (
+        <div className="pt-2">
+          <Input
+            label={data.measurementSystem === "imperial" ? "Target weight (optional)" : "Target weight (optional)"}
+            type="number"
+            inputMode="decimal"
+            value={data.targetWeight}
+            onChange={(e) => set("targetWeight", e.target.value)}
+            placeholder={data.measurementSystem === "imperial" ? "e.g. 10 st" : "e.g. 70 kg"}
+            hint={data.measurementSystem === "imperial" ? "stone (decimal, e.g. 10.5)" : "kg"}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -269,7 +284,7 @@ export default function OnboardingPage() {
   const [data, setData] = useState<FormData>({
     measurementSystem: "metric",
     name: "", gender: "", age: "",
-    heightCm: "", weightKg: "",
+    heightCm: "", weightKg: "", targetWeight: "",
     heightFeet: "", heightInches: "", weightStone: "", weightLbs: "",
     goal: "", experience: "", workoutType: "gym", workoutDays: [1, 3, 5],
     dietaryRestrictions: [], likedFoods: "", dislikedFoods: "",
@@ -320,6 +335,13 @@ export default function OnboardingPage() {
         weightKg = Number(data.weightKg);
       }
 
+      let targetWeightKg: number | undefined;
+      if (data.targetWeight) {
+        targetWeightKg = data.measurementSystem === "imperial"
+          ? stoneLbsToKg(Number(data.targetWeight), 0)
+          : Number(data.targetWeight);
+      }
+
       const res = await fetch("/api/ai/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -330,6 +352,7 @@ export default function OnboardingPage() {
           age: Number(data.age),
           heightCm,
           weightKg,
+          targetWeightKg,
           goal: data.goal,
           experience: data.experience,
           workoutType: data.workoutType,

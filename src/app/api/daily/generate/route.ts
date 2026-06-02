@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAuthSession } from "aws-amplify/auth/server";
 import { runWithAmplifyServerContext } from "@/lib/auth/amplify-server";
 import { getActivePlan, WorkoutPlan, MealPlan } from "@/lib/db/plans";
+
+const capitalize = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 import { getDailyRecord, putDailyRecord, DailyRecord, DailyPlanItem } from "@/lib/db/daily";
 
 async function getUserId(req: NextRequest) {
@@ -60,11 +62,14 @@ export async function POST(req: NextRequest) {
       items.push({
         id: `meal-${meal.id}-${date}`,
         type: "meal",
-        label: meal.name,
+        label: capitalize(meal.name),
         detail: `${meal.calories} kcal · P ${meal.proteinG}g · C ${meal.carbsG}g · F ${meal.fatG}g`,
         completed: false,
         scheduledTime: MEAL_TIMES[meal.time],
         calories: meal.calories,
+        proteinG: meal.proteinG,
+        carbsG: meal.carbsG,
+        fatG: meal.fatG,
       });
     }
 

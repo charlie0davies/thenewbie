@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Dumbbell, UtensilsCrossed, TrendingUp, ShoppingCart, Settings, LogOut } from "lucide-react";
+import { Home, Dumbbell, UtensilsCrossed, TrendingUp, ShoppingCart, MessageCircle, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "aws-amplify/auth";
 
@@ -12,6 +12,7 @@ const nav = [
   { href: "/nutrition", icon: UtensilsCrossed, label: "Nutrition" },
   { href: "/progress", icon: TrendingUp, label: "Progress" },
   { href: "/shopping", icon: ShoppingCart, label: "Shopping" },
+  { href: "/coach", icon: MessageCircle, label: "AI Coach" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 

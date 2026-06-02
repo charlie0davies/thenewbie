@@ -20,6 +20,42 @@ import type { DailyRecord, DailyPlanItem } from "@/lib/db/daily";
 
 const today = new Date().toISOString().slice(0, 10);
 
+// ─── Celebration burst ────────────────────────────────────────────────────────
+
+const PARTICLE_COLORS = ["#f97316","#22c55e","#3b82f6","#ec4899","#eab308","#8b5cf6"];
+
+function CelebrationBurst({ active }: { active: boolean }) {
+  if (!active) return null;
+  return (
+    <span className="absolute inset-0 pointer-events-none" style={{ zIndex: 20 }}>
+      {PARTICLE_COLORS.map((color, i) => {
+        const angle = (i / PARTICLE_COLORS.length) * 360;
+        const rad = (angle * Math.PI) / 180;
+        const dist = 26;
+        const tx = Math.round(Math.cos(rad) * dist);
+        const ty = Math.round(Math.sin(rad) * dist);
+        return (
+          <span
+            key={i}
+            className="absolute rounded-full"
+            style={{
+              width: 6, height: 6, background: color,
+              top: "50%", left: "50%",
+              animationName: "particle-fly",
+              animationDuration: "0.5s",
+              animationTimingFunction: "ease-out",
+              animationFillMode: "forwards",
+              animationDelay: `${i * 15}ms`,
+              "--tx": `${tx}px`,
+              "--ty": `${ty}px`,
+            } as React.CSSProperties}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 // ─── Item Row ─────────────────────────────────────────────────────────────────
 
 function ItemRow({
@@ -32,6 +68,16 @@ function ItemRow({
   const [expanded, setExpanded] = useState(false);
   const [note, setNote] = useState(item.partialNote || "");
   const [editing, setEditing] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
+
+  function handleCheck(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!item.completed) {
+      setCelebrating(true);
+      setTimeout(() => setCelebrating(false), 650);
+    }
+    onToggle(item.id, !item.completed);
+  }
 
   const icon =
     item.type === "exercise" ? (
@@ -45,8 +91,8 @@ function ItemRow({
   return (
     <div
       className={cn(
-        "rounded-xl border transition-all",
-        item.completed ? "border-border bg-muted/40" : "border-border bg-muted"
+        "rounded-xl border transition-all duration-200",
+        item.completed ? "border-green-200 bg-green-50/60" : "border-border bg-white"
       )}
     >
       <div
@@ -55,14 +101,15 @@ function ItemRow({
       >
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle(item.id, !item.completed);
-          }}
-          className="shrink-0"
+          onClick={handleCheck}
+          className="shrink-0 relative"
         >
+          <CelebrationBurst active={celebrating} />
           {item.completed ? (
-            <CheckCircle2 size={22} className="text-primary" />
+            <CheckCircle2
+              size={22}
+              className={cn("text-primary transition-transform", celebrating && "animate-check-pop")}
+            />
           ) : (
             <Circle size={22} className="text-muted-foreground" />
           )}
@@ -176,17 +223,24 @@ function WaterTracker({
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 mb-2">
         {[200, 250, 500].map((ml) => (
           <button
             key={ml}
             onClick={() => onAdd(ml)}
-            className="flex-1 py-2 text-xs font-medium bg-muted hover:bg-border rounded-lg transition-colors border border-border"
+            className="flex-1 py-2 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors border border-blue-100"
           >
             +{ml}ml
           </button>
         ))}
       </div>
+      <button
+        onClick={() => onAdd(-250)}
+        disabled={done <= 0}
+        className="w-full py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors border border-border disabled:opacity-40"
+      >
+        − 250ml
+      </button>
     </Card>
   );
 }
