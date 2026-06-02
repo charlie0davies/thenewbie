@@ -29,7 +29,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       primary:
         "bg-primary text-white hover:bg-green-400",
       secondary:
-        "bg-muted text-foreground hover:bg-[#2a2a2a]",
+        "bg-muted text-foreground hover:bg-border",
       outline:
         "border border-border text-foreground hover:bg-muted",
       ghost:

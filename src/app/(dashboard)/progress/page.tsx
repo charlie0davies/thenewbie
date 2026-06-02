@@ -150,7 +150,7 @@ export default function ProgressPage() {
             </CardHeader>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 10, fill: "#71717a" }}
@@ -166,12 +166,12 @@ export default function ProgressPage() {
                 />
                 <Tooltip
                   contentStyle={{
-                    background: "#111",
-                    border: "1px solid #222",
+                    background: "#fff",
+                    border: "1px solid #e5e7eb",
                     borderRadius: 8,
                     fontSize: 12,
                   }}
-                  labelStyle={{ color: "#fafafa" }}
+                  labelStyle={{ color: "#111827" }}
                 />
                 <Line
                   type="monotone"

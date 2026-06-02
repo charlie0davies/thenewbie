@@ -155,8 +155,30 @@ Rules:
     messages: [{ role: "user", content: prompt }],
   });
 
-  const text = (message.content[0] as { type: string; text: string }).text;
-  const plan = JSON.parse(text);
+  const raw = (message.content[0] as { type: string; text: string }).text;
+
+  // Strip markdown code fences if Claude wraps the response
+  let jsonText = raw.trim();
+  const fenceMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    jsonText = fenceMatch[1].trim();
+  } else {
+    // Find first { to last } in case there's any leading/trailing text
+    const start = jsonText.indexOf("{");
+    const end = jsonText.lastIndexOf("}");
+    if (start !== -1 && end !== -1) jsonText = jsonText.slice(start, end + 1);
+  }
+
+  let plan: ReturnType<typeof JSON.parse>;
+  try {
+    plan = JSON.parse(jsonText);
+  } catch {
+    console.error("Failed to parse AI response:", raw.slice(0, 500));
+    return NextResponse.json(
+      { error: "AI returned an unexpected format. Please try again." },
+      { status: 500 }
+    );
+  }
 
   await saveActivePlan(
     { userId, planId: "active-workout", createdAt: new Date().toISOString(), ...plan.workoutPlan },

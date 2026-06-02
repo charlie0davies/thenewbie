@@ -101,7 +101,7 @@ function ItemRow({
       {expanded && (
         <div className="px-3 pb-3 pt-0 border-t border-border mt-0 flex flex-col gap-2">
           {item.sets && (
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               {item.sets} sets × {item.reps}
               {item.weightKg ? ` @ ${item.weightKg}kg` : ""}
             </p>
@@ -181,7 +181,7 @@ function WaterTracker({
           <button
             key={ml}
             onClick={() => onAdd(ml)}
-            className="flex-1 py-2 text-xs font-medium bg-muted hover:bg-[#2a2a2a] rounded-lg transition-colors border border-border"
+            className="flex-1 py-2 text-xs font-medium bg-muted hover:bg-border rounded-lg transition-colors border border-border"
           >
             +{ml}ml
           </button>
@@ -280,7 +280,7 @@ export default function TodayPage() {
               <div className="flex items-center gap-4 p-4 bg-card border border-border rounded-2xl">
                 <div className="relative w-14 h-14 shrink-0">
                   <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
-                    <circle cx="28" cy="28" r="22" strokeWidth="5" stroke="#222" fill="none" />
+                    <circle cx="28" cy="28" r="22" strokeWidth="5" stroke="#e5e7eb" fill="none" />
                     <circle
                       cx="28"
                       cy="28"

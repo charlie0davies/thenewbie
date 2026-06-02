@@ -23,6 +23,9 @@ export default function SignupPage() {
         password: form.password,
         options: { userAttributes: { name: form.name, email: form.email } },
       });
+      // Store credentials temporarily so verify page can auto-login
+      sessionStorage.setItem("pending_email", form.email);
+      sessionStorage.setItem("pending_pw", form.password);
       router.push(`/verify?email=${encodeURIComponent(form.email)}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign up failed");
@@ -32,54 +35,59 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="flex flex-col min-h-screen px-6 bg-background">
-      <div className="flex-1 flex flex-col justify-center max-w-sm w-full mx-auto gap-8">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold">Create account</h1>
-          <p className="text-muted-foreground">Start your fitness journey today.</p>
+    <main className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm">
+        <div className="bg-card rounded-3xl border border-border p-8 shadow-sm">
+          <div className="mb-8 text-center">
+            <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl font-black text-white">N</span>
+            </div>
+            <h1 className="text-2xl font-bold">Create account</h1>
+            <p className="text-muted-foreground text-sm mt-1">Start your fitness journey today.</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <Input
+              label="Full name"
+              type="text"
+              placeholder="Charlie Davies"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              required
+              autoComplete="name"
+            />
+            <Input
+              label="Email"
+              type="email"
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              required
+              autoComplete="email"
+            />
+            <Input
+              label="Password"
+              type="password"
+              placeholder="Min. 8 characters"
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" size="lg" loading={loading} className="mt-2">
+              Create account
+            </Button>
+          </form>
+
+          <p className="text-center text-sm text-muted-foreground mt-6">
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary font-semibold">
+              Sign in
+            </Link>
+          </p>
         </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input
-            label="Full name"
-            type="text"
-            placeholder="Charlie Davies"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            required
-            autoComplete="name"
-          />
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@example.com"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            required
-            autoComplete="email"
-          />
-          <Input
-            label="Password"
-            type="password"
-            placeholder="Min. 8 characters"
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            required
-            minLength={8}
-            autoComplete="new-password"
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" size="lg" loading={loading} className="mt-2">
-            Create account
-          </Button>
-        </form>
-
-        <p className="text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/login" className="text-primary font-medium">
-            Sign in
-          </Link>
-        </p>
       </div>
     </main>
   );
