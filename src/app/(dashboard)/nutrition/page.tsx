@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import Button from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { Flame, Beef, Wheat, Droplets } from "lucide-react";
+import { formatIngredient } from "@/lib/formatIngredient";
+import { Flame, Beef, Wheat, Droplets, RefreshCw } from "lucide-react";
 import type { MealPlan, MealTemplate, WorkoutPlan } from "@/lib/db/plans";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -13,7 +15,11 @@ const todayDow = new Date().getDay();
 
 const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
-function MacroPill({ label, value, unit, color, icon }: { label: string; value: number; unit: string; color: string; icon: React.ReactNode }) {
+// ─── Macro pill ───────────────────────────────────────────────────────────────
+
+function MacroPill({ label, value, unit, color, icon }: {
+  label: string; value: number; unit: string; color: string; icon: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col items-center gap-1 bg-muted rounded-xl p-3 flex-1">
       <div className={cn("text-sm", color)}>{icon}</div>
@@ -22,6 +28,8 @@ function MacroPill({ label, value, unit, color, icon }: { label: string; value: 
     </div>
   );
 }
+
+// ─── Meal card ────────────────────────────────────────────────────────────────
 
 function MealCard({ meal }: { meal: MealTemplate }) {
   const [open, setOpen] = useState(false);
@@ -67,7 +75,9 @@ function MealCard({ meal }: { meal: MealTemplate }) {
             {meal.ingredients.map((ing, i) => (
               <div key={i} className="flex justify-between text-sm">
                 <span>{cap(ing.name)}</span>
-                <span className="text-muted-foreground">{ing.amountG}{ing.unit}</span>
+                <span className="text-muted-foreground font-medium">
+                  {formatIngredient(ing.name, ing.amountG, ing.unit)}
+                </span>
               </div>
             ))}
           </div>
@@ -77,22 +87,45 @@ function MealCard({ meal }: { meal: MealTemplate }) {
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function NutritionPage() {
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
   const [workoutPlan, setWorkoutPlan] = useState<WorkoutPlan | null>(null);
   const [selectedDay, setSelectedDay] = useState(todayDow);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenDone, setRegenDone] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/plans?type=meal").then((r) => r.json()),
-      fetch("/api/plans?type=workout").then((r) => r.json()),
-    ]).then(([meal, workout]) => {
+  async function loadPlans() {
+    setLoading(true);
+    try {
+      const [meal, workout] = await Promise.all([
+        fetch("/api/plans?type=meal").then((r) => r.json()),
+        fetch("/api/plans?type=workout").then((r) => r.json()),
+      ]);
       setMealPlan(meal);
       setWorkoutPlan(workout);
+    } finally {
       setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    }
+  }
+
+  useEffect(() => { loadPlans(); }, []);
+
+  async function handleRegenerate() {
+    setRegenerating(true);
+    try {
+      const res = await fetch("/api/ai/regenerate-meals", { method: "POST" });
+      if (!res.ok) throw new Error("Regeneration failed");
+      await loadPlans();
+      setRegenDone(true);
+    } catch {
+      // silently fail — banner stays
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -102,10 +135,12 @@ export default function NutritionPage() {
     );
   }
 
+  const hasSplitMeals = !!(mealPlan?.workoutDayMeals?.length && mealPlan?.restDayMeals?.length);
+
   const isWorkoutDay = workoutPlan?.weeklyRoutine?.find((d) => d.dayOfWeek === selectedDay)?.isWorkoutDay ?? false;
 
-  // Pick the right meal set for the selected day type
-  const meals = mealPlan
+  // Pick the right meal set for the selected day
+  const meals: MealTemplate[] = mealPlan
     ? isWorkoutDay && mealPlan.workoutDayMeals?.length
       ? mealPlan.workoutDayMeals
       : !isWorkoutDay && mealPlan.restDayMeals?.length
@@ -122,8 +157,8 @@ export default function NutritionPage() {
     : mealPlan.restDayCarbsG;
   const displayFat = mealPlan?.dailyFatG ?? 0;
 
-  const order = ["breakfast", "lunch", "snack", "dinner"];
-  const sorted = [...meals].sort((a, b) => order.indexOf(a.time) - order.indexOf(b.time));
+  const mealOrder = ["breakfast", "lunch", "snack", "dinner"];
+  const sorted = [...meals].sort((a, b) => mealOrder.indexOf(a.time) - mealOrder.indexOf(b.time));
 
   return (
     <div>
@@ -161,13 +196,39 @@ export default function NutritionPage() {
           </Card>
         ) : (
           <>
+            {/* Upgrade banner — show if plan doesn't have split meals yet */}
+            {!hasSplitMeals && !regenDone && (
+              <div className="flex items-center justify-between gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-800">Same meals showing every day?</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Tap to regenerate your plan with separate workout &amp; rest day meals.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleRegenerate}
+                  loading={regenerating}
+                  className="shrink-0 bg-amber-500 hover:bg-amber-400 border-0"
+                >
+                  <RefreshCw size={14} className="mr-1" /> Update
+                </Button>
+              </div>
+            )}
+
+            {regenDone && (
+              <div className="p-3 bg-green-50 rounded-2xl border border-green-100 text-center text-sm text-green-700 font-medium">
+                ✓ Meal plan updated with workout &amp; rest day meals!
+              </div>
+            )}
+
             {/* Day type badge */}
             <div className={cn(
               "flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border",
               isWorkoutDay ? "bg-orange-50 border-orange-100 text-orange-700" : "bg-blue-50 border-blue-100 text-blue-700"
             )}>
               <span>{isWorkoutDay ? "🏋️" : "🛋️"}</span>
-              <span>{isWorkoutDay ? "Workout day — fuel up well" : "Rest day — focus on recovery"}</span>
+              <span>{isWorkoutDay ? "Workout day — fuel up well" : "Rest day — lighter eating"}</span>
             </div>
 
             {/* Daily macros */}
@@ -185,7 +246,7 @@ export default function NutritionPage() {
             </Card>
 
             {/* Meals */}
-            <p className="text-xs text-muted-foreground px-1">{meals.length} meals · tap to see ingredients</p>
+            <p className="text-xs text-muted-foreground px-1">{sorted.length} meals · tap to see ingredients</p>
             {sorted.map((meal) => <MealCard key={meal.id} meal={meal} />)}
           </>
         )}

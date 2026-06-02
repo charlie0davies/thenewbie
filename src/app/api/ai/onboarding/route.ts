@@ -187,7 +187,16 @@ Return ONLY this JSON. Each array must have 3-4 meals. IDs must be unique across
   ]
 }
 
-Rules: realistic UK ingredients, max 6 ingredients per meal. workoutDayMeals should be higher carb/protein to fuel training. restDayMeals should be lighter and more varied. Both sets must match their respective calorie targets.`;
+UNIT RULES — use natural units, not grams, for:
+- Eggs → amountG = count (e.g. 2 eggs: amountG: 2, unit: "piece")
+- Bread/toast → amountG = slice count, unit: "slice"
+- Whole fruits (banana, apple, orange) → amountG: 1, unit: "piece"
+- Oils, butter, honey, sauces → amountG = tbsp count, unit: "tbsp"
+- Spices, small seasonings → amountG = tsp count, unit: "tsp"
+- Liquids → unit: "ml"
+- Everything else → unit: "g"
+
+Other rules: realistic UK ingredients, max 6 ingredients per meal. workoutDayMeals should be higher carb/protein to fuel training. restDayMeals should be lighter and more varied. Both sets must match their respective calorie targets.`;
 
   // ── Call 3: Shopping list ─────────────────────────────────────────────────
 
