@@ -73,16 +73,41 @@ function DailyMealCard({ item }: { item: DailyPlanItem }) {
             {cap(timeLabel)}
             {item.scheduledTime && <span className="ml-1.5 font-normal normal-case text-muted-foreground">{item.scheduledTime}</span>}
           </span>
-          <p className={cn("font-semibold mt-0.5 truncate", item.completed && "line-through text-muted-foreground")}>
+          <p className={cn("font-semibold mt-0.5 leading-snug", item.completed && "line-through text-muted-foreground")}>
             {cap(item.label)}
           </p>
         </div>
         {item.calories && <span className="text-sm font-semibold text-primary shrink-0">{item.calories} kcal</span>}
       </button>
 
-      {open && item.detail && (
+      {open && (
         <div className="px-4 pb-4 border-t border-border">
-          <p className="text-xs text-muted-foreground mt-3">{item.detail}</p>
+          {/* Macros */}
+          {(item.proteinG || item.carbsG || item.fatG) && (
+            <div className="flex gap-2 mt-3 mb-3">
+              {item.proteinG ? <span className="text-xs rounded-lg px-2.5 py-1 border border-green-100 bg-green-50 text-green-700 font-medium">P: {item.proteinG}g</span> : null}
+              {item.carbsG ? <span className="text-xs rounded-lg px-2.5 py-1 border border-amber-100 bg-amber-50 text-amber-700 font-medium">C: {item.carbsG}g</span> : null}
+              {item.fatG ? <span className="text-xs rounded-lg px-2.5 py-1 border border-blue-100 bg-blue-50 text-blue-700 font-medium">F: {item.fatG}g</span> : null}
+            </div>
+          )}
+          {/* Ingredients */}
+          {item.ingredients && item.ingredients.length > 0 ? (
+            <>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Ingredients</p>
+              <div className="flex flex-col gap-1.5">
+                {item.ingredients.map((ing, i) => (
+                  <div key={i} className="flex justify-between text-sm">
+                    <span>{cap(ing.name)}</span>
+                    <span className="text-muted-foreground font-medium">
+                      {formatIngredient(ing.name, ing.amountG, ing.unit)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            item.detail && <p className="text-xs text-muted-foreground">{item.detail}</p>
+          )}
         </div>
       )}
     </div>
@@ -153,22 +178,24 @@ export default function NutritionPage() {
     setWorkoutPlan(workout ?? null);
   }
 
-  // Fetch or generate the daily record for a given day-of-week
-  const loadDay = useCallback(async (dow: number) => {
+  const loadDay = useCallback(async (dow: number, force = false) => {
     setDayLoading(true);
     const date = dateForDow(dow);
     try {
-      const res = await fetch(`/api/daily/${date}`);
-      const existing = await res.json();
-      if (existing?.items?.length) {
-        setDailyRecord(existing);
-        return;
+      if (!force) {
+        const res = await fetch(`/api/daily/${date}`);
+        const existing = await res.json();
+        // Use cached record only if it has ingredients (newer format)
+        if (existing?.items?.length) {
+          setDailyRecord(existing);
+          return;
+        }
       }
-      // Not yet generated — create it
+      // Generate (or force-regenerate preserving ticks)
       const gen = await fetch("/api/daily/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ date, force }),
       });
       const generated = await gen.json();
       setDailyRecord(generated?.items?.length ? generated : null);
@@ -201,8 +228,9 @@ export default function NutritionPage() {
       if (!res.ok) throw new Error();
       await loadPlans();
       setRegenDone(true);
-      // Reload current day with new plan
-      await loadDay(selectedDay);
+      // Force-refresh the selected day (preserves completion ticks)
+      setDailyRecord(null);
+      await loadDay(selectedDay, true);
     } catch {
       /* leave banner */
     } finally {

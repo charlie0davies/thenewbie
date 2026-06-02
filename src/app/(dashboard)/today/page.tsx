@@ -17,6 +17,9 @@ import {
   Pencil,
 } from "lucide-react";
 import type { DailyRecord, DailyPlanItem } from "@/lib/db/daily";
+import { formatIngredient } from "@/lib/formatIngredient";
+
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -120,7 +123,7 @@ function ItemRow({
           <div className="min-w-0">
             <p
               className={cn(
-                "text-sm font-medium truncate",
+                "text-sm font-medium leading-snug",
                 item.completed && "line-through text-muted-foreground"
               )}
             >
@@ -146,12 +149,35 @@ function ItemRow({
       </div>
 
       {expanded && (
-        <div className="px-3 pb-3 pt-0 border-t border-border mt-0 flex flex-col gap-2">
-          {item.sets && (
+        <div className="px-3 pb-3 pt-2 border-t border-border flex flex-col gap-2">
+          {/* Exercise details */}
+          {item.type === "exercise" && item.sets && (
             <p className="text-xs text-muted-foreground">
               {item.sets} sets × {item.reps}
               {item.weightKg ? ` @ ${item.weightKg}kg` : ""}
             </p>
+          )}
+          {/* Meal ingredients */}
+          {item.type === "meal" && item.ingredients && item.ingredients.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ingredients</p>
+              {item.ingredients.map((ing, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span className="text-foreground">{cap(ing.name)}</span>
+                  <span className="text-muted-foreground font-medium">
+                    {formatIngredient(ing.name, ing.amountG, ing.unit)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Macros for meals */}
+          {item.type === "meal" && (item.proteinG || item.carbsG || item.fatG) && (
+            <div className="flex gap-2 mt-1">
+              {item.proteinG ? <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-md border border-green-100 font-medium">P {item.proteinG}g</span> : null}
+              {item.carbsG ? <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-100 font-medium">C {item.carbsG}g</span> : null}
+              {item.fatG ? <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-100 font-medium">F {item.fatG}g</span> : null}
+            </div>
           )}
           {!item.completed && (
             <div className="flex items-center gap-2 mt-1">
@@ -257,14 +283,18 @@ export default function TodayPage() {
         const res = await fetch(`/api/daily/${today}`);
         const data = await res.json();
 
-        if (data && data.items) {
+        // If record exists but has no ingredients yet, force-regenerate (preserves ticks)
+        const needsRefresh =
+          !data?.items ||
+          (data?.items?.length && data.items.filter((i: { type: string }) => i.type === "meal").every((i: { ingredients?: unknown[] }) => !i.ingredients?.length));
+
+        if (!needsRefresh && data?.items) {
           setRecord(data);
         } else {
-          // No record yet — auto-generate from saved plans
           const gen = await fetch("/api/daily/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ date: today }),
+            body: JSON.stringify({ date: today, force: needsRefresh }),
           });
           if (gen.ok) {
             const generated = await gen.json();

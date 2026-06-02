@@ -68,16 +68,23 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
     let date: string;
+    let force = false;
     try {
       const body = await req.json();
       date = body.date || new Date().toISOString().slice(0, 10);
+      force = body.force === true;
     } catch {
       date = new Date().toISOString().slice(0, 10);
     }
 
-    // Return existing record if already generated
+    // Return existing record unless forced (force preserves completion status)
     const existing = await getDailyRecord(userId, date);
-    if (existing) return NextResponse.json(existing);
+    if (existing && !force) return NextResponse.json(existing);
+
+    // If forcing, we preserve completion states so ticks aren't lost
+    const completionMap = new Map(
+      (existing?.items ?? []).map((i) => [i.id, { completed: i.completed, partialNote: i.partialNote }])
+    );
 
     const [workoutPlan, mealPlan] = await Promise.all([
       getActivePlan(userId, "workout") as Promise<WorkoutPlan | null>,
@@ -107,29 +114,36 @@ export async function POST(req: NextRequest) {
       (a, b) => mealOrder.indexOf(a.time) - mealOrder.indexOf(b.time)
     );
     for (const meal of sorted) {
+      const itemId = `meal-${meal.id}-${date}`;
+      const saved = completionMap.get(itemId);
       items.push({
-        id: `meal-${meal.id}-${date}`,
+        id: itemId,
         type: "meal",
         label: capitalize(meal.name),
         detail: `${meal.calories} kcal · P ${meal.proteinG}g · C ${meal.carbsG}g · F ${meal.fatG}g`,
-        completed: false,
+        completed: saved?.completed ?? false,
+        partialNote: saved?.partialNote,
         scheduledTime: MEAL_TIMES[meal.time],
         calories: meal.calories,
         proteinG: meal.proteinG,
         carbsG: meal.carbsG,
         fatG: meal.fatG,
+        ingredients: meal.ingredients ?? [],
       });
     }
 
     // Workout exercises
     if (dayRoutine?.isWorkoutDay) {
       for (const ex of dayRoutine.exercises) {
+        const exId = `exercise-${ex.id}-${date}`;
+        const saved = completionMap.get(exId);
         items.push({
-          id: `exercise-${ex.id}-${date}`,
+          id: exId,
           type: "exercise",
           label: ex.name,
           detail: ex.muscleGroup,
-          completed: false,
+          completed: saved?.completed ?? false,
+          partialNote: saved?.partialNote,
           sets: ex.sets,
           reps: ex.reps,
           weightKg: ex.startingWeightKg,
@@ -148,10 +162,6 @@ export async function POST(req: NextRequest) {
         calories: 150,
       });
     }
-
-    const targetCals = isWorkoutDay
-      ? mealPlan.dailyCalories
-      : mealPlan.restDayCalories ?? mealPlan.dailyCalories;
 
     const record: DailyRecord = {
       userId,

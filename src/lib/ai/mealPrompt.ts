@@ -1,8 +1,3 @@
-/**
- * Builds the meal-plan prompt used by both onboarding and regenerate-meals.
- * Asks for 3 workout-day variants + 2 rest-day variants so every day feels
- * different rather than repeating the same template.
- */
 export interface MealPromptParams {
   gender: string;
   age: number;
@@ -27,21 +22,56 @@ export function buildMealPrompt(p: MealPromptParams): string {
   const restrictions = p.dietaryRestrictions?.join(", ") || "none";
   const likes = p.likedFoods || "no preference";
   const dislikes = p.dislikedFoods || "none";
-  const extra = p.extraContext ? `\nExtra context: ${p.extraContext}` : "";
+  const extra = p.extraContext ? `\nUser notes: ${p.extraContext}` : "";
+  const isVeg = p.dietaryRestrictions?.some((r) =>
+    ["vegetarian", "vegan"].includes(r.toLowerCase())
+  );
 
-  return `You are a UK nutritionist. Return JSON only — no markdown, no explanation.
+  // Assign completely different protein sources per variant to force variety
+  const workoutProteins = isVeg
+    ? ["tofu", "chickpeas/lentils", "halloumi/eggs"]
+    : ["chicken breast", "salmon/tuna", "lean beef/turkey mince"];
+  const restProteins = isVeg
+    ? ["eggs/cheese", "mixed beans"]
+    : ["white fish/prawns", "eggs/cottage cheese"];
+
+  return `You are a UK nutritionist. Return ONLY valid JSON — no markdown, no explanation, no extra text.
 
 Profile: ${p.gender}, age ${p.age}, goal: ${p.goal}.
-Workout-day targets: ${p.targetCalories} kcal | ${p.proteinG}g protein | ${p.carbsG}g carbs | ${p.fatG}g fat
-Rest-day targets: ${p.restCalories} kcal | ${p.proteinG}g protein | ${p.restCarbsG}g carbs | ${p.fatG}g fat
-Dietary restrictions: ${restrictions}. Likes: ${likes}. Dislikes: ${dislikes}.
-Simplicity: ${p.mealSimplicity ?? 2}/5. Cooking skill: ${p.cookingSkill ?? "beginner"}.${extra}
+Workout-day calorie target: ${p.targetCalories} kcal | ${p.proteinG}g protein | ${p.carbsG}g carbs | ${p.fatG}g fat
+Rest-day calorie target: ${p.restCalories} kcal | ${p.proteinG}g protein | ${p.restCarbsG}g carbs | ${p.fatG}g fat
+Dietary restrictions: ${restrictions} | Likes: ${likes} | Dislikes: ${dislikes}
+Simplicity: ${p.mealSimplicity ?? 2}/5 | Cooking skill: ${p.cookingSkill ?? "beginner"}${extra}
 
-Generate:
-- 3 different workout-day meal plans (A/B/C) — each should feel meaningfully different (different proteins, cooking styles, cuisines)
-- 2 different rest-day meal plans (A/B) — lighter, more varied
+━━━ VARIETY RULES — THIS IS THE MOST IMPORTANT PART ━━━
+Each variant MUST use a completely different main protein AND different ingredients.
+Sharing the same main ingredient across variants is NOT allowed.
 
-Return ONLY this exact JSON structure:
+WORKOUT DAY VARIANT A — main protein: ${workoutProteins[0]}
+  Breakfast: oats/porridge with fruit and seeds
+  Lunch: ${workoutProteins[0]} with rice and vegetables
+  Dinner: ${workoutProteins[0]} with sweet potato or pasta
+
+WORKOUT DAY VARIANT B — main protein: ${workoutProteins[1]}
+  Breakfast: scrambled eggs or omelette (NO oats)
+  Lunch: ${workoutProteins[1]} with quinoa or couscous (NO rice)
+  Dinner: ${workoutProteins[1]} with different vegetables to variant A
+
+WORKOUT DAY VARIANT C — main protein: ${workoutProteins[2]}
+  Breakfast: Greek yogurt or protein shake with granola (NO eggs, NO oats)
+  Lunch: ${workoutProteins[2]} in wrap/pitta or with noodles (NO rice, NO quinoa)
+  Dinner: ${workoutProteins[2]} with different carb to variants A and B
+
+REST DAY VARIANT A — main protein: ${restProteins[0]}
+  Lighter meals, more vegetables, no heavy carbs
+  Must feel completely different from all workout variants
+
+REST DAY VARIANT B — main protein: ${restProteins[1]}
+  Different ingredients to rest variant A
+  Could include soup, salad, lighter options
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return this EXACT JSON structure:
 {
   "dailyCalories": ${p.targetCalories},
   "dailyProteinG": ${p.proteinG},
@@ -57,23 +87,23 @@ Return ONLY this exact JSON structure:
   "workoutDayMeals": [],
   "restDayMeals": [],
   "workoutDayVariants": [
-    [<meal>, <meal>, <meal>],
-    [<meal>, <meal>, <meal>],
-    [<meal>, <meal>, <meal>]
+    [VARIANT_A_BREAKFAST, VARIANT_A_LUNCH, VARIANT_A_DINNER],
+    [VARIANT_B_BREAKFAST, VARIANT_B_LUNCH, VARIANT_B_DINNER],
+    [VARIANT_C_BREAKFAST, VARIANT_C_LUNCH, VARIANT_C_DINNER]
   ],
   "restDayVariants": [
-    [<meal>, <meal>, <meal>],
-    [<meal>, <meal>, <meal>]
+    [REST_A_BREAKFAST, REST_A_LUNCH, REST_A_DINNER],
+    [REST_B_BREAKFAST, REST_B_LUNCH, REST_B_DINNER]
   ]
 }
 
-Each <meal>:
+Each meal object:
 {
-  "id": "<unique across ALL meals — e.g. wd_a_breakfast>",
-  "name": "<Meal name>",
-  "time": "<breakfast|lunch|dinner>",
+  "id": "unique_id_no_spaces",
+  "name": "Full descriptive meal name",
+  "time": "breakfast" | "lunch" | "dinner",
   "ingredients": [
-    { "name": "<ingredient>", "amountG": <number>, "unit": "<piece|slice|tbsp|tsp|g|ml>" }
+    { "name": "ingredient name", "amountG": <number>, "unit": "piece|slice|tbsp|tsp|g|ml" }
   ],
   "calories": <number>,
   "proteinG": <number>,
@@ -82,19 +112,13 @@ Each <meal>:
   "prepMinutes": <number>
 }
 
-UNIT RULES (use natural units — not grams — for these):
-- Eggs → amountG = egg count, unit "piece"
-- Bread/toast → amountG = slice count, unit "slice"
+UNIT RULES:
+- Eggs → amountG = count, unit "piece"
+- Bread/toast → amountG = slices, unit "slice"
 - Whole fruit → amountG = 1, unit "piece"
-- Oils/butter/honey/sauces (≤60g) → tbsp count, unit "tbsp"
-- Spices/small seasonings (≤10g) → tsp count, unit "tsp"
-- Liquids → unit "ml"
-- Everything else → unit "g"
+- Oils/butter/honey/sauces ≤60g → tbsp count, unit "tbsp"
+- Spices/seasonings ≤10g → tsp count, unit "tsp"
+- Liquids → unit "ml" | Everything else → unit "g"
 
-Other rules:
-- Max 5 ingredients per meal
-- workoutDayVariants: higher carbs + protein, fuel for training
-- restDayVariants: lighter, fewer carbs, different enough to feel varied
-- All three workout variants must be clearly different from each other (different main protein)
-- Realistic UK ingredients and portion sizes`;
+Max 5 ingredients per meal. Use realistic UK ingredients and portion sizes.`;
 }

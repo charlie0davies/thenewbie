@@ -18,6 +18,7 @@ export interface DailyPlanItem {
   proteinG?: number;
   carbsG?: number;
   fatG?: number;
+  ingredients?: { name: string; amountG: number; unit: string }[];
   sets?: number;
   reps?: string;
   weightKg?: number;
