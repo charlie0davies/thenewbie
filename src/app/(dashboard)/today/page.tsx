@@ -198,13 +198,32 @@ export default function TodayPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/daily/${today}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setRecord(data);
+    async function load() {
+      try {
+        const res = await fetch(`/api/daily/${today}`);
+        const data = await res.json();
+
+        if (data && data.items) {
+          setRecord(data);
+        } else {
+          // No record yet — auto-generate from saved plans
+          const gen = await fetch("/api/daily/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ date: today }),
+          });
+          if (gen.ok) {
+            const generated = await gen.json();
+            setRecord(generated?.items ? generated : null);
+          }
+        }
+      } catch {
+        // leave record as null
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    }
+    load();
   }, []);
 
   async function handleToggle(itemId: string, completed: boolean) {

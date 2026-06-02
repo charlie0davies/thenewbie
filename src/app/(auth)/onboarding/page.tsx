@@ -359,6 +359,13 @@ export default function OnboardingPage() {
         throw new Error(errMsg);
       }
 
+      // Pre-generate today's daily plan so it's ready immediately
+      await fetch("/api/daily/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: new Date().toISOString().slice(0, 10) }),
+      }).catch(() => { /* non-fatal — Today page will generate on load */ });
+
       router.push("/today");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
