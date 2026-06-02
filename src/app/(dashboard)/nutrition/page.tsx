@@ -103,7 +103,25 @@ export default function NutritionPage() {
   }
 
   const isWorkoutDay = workoutPlan?.weeklyRoutine?.find((d) => d.dayOfWeek === selectedDay)?.isWorkoutDay ?? false;
-  const meals = mealPlan?.mealTemplates ?? [];
+
+  // Pick the right meal set for the selected day type
+  const meals = mealPlan
+    ? isWorkoutDay && mealPlan.workoutDayMeals?.length
+      ? mealPlan.workoutDayMeals
+      : !isWorkoutDay && mealPlan.restDayMeals?.length
+      ? mealPlan.restDayMeals
+      : mealPlan.mealTemplates ?? []
+    : [];
+
+  const displayCalories = isWorkoutDay || !mealPlan?.restDayCalories
+    ? mealPlan?.dailyCalories ?? 0
+    : mealPlan.restDayCalories;
+  const displayProtein = mealPlan?.dailyProteinG ?? 0;
+  const displayCarbs = isWorkoutDay || !mealPlan?.restDayCarbsG
+    ? mealPlan?.dailyCarbsG ?? 0
+    : mealPlan.restDayCarbsG;
+  const displayFat = mealPlan?.dailyFatG ?? 0;
+
   const order = ["breakfast", "lunch", "snack", "dinner"];
   const sorted = [...meals].sort((a, b) => order.indexOf(a.time) - order.indexOf(b.time));
 
@@ -156,10 +174,10 @@ export default function NutritionPage() {
             <Card>
               <CardHeader><CardTitle>Daily targets</CardTitle></CardHeader>
               <div className="flex gap-2">
-                <MacroPill label="Calories" value={mealPlan.dailyCalories} unit="kcal" color="text-primary" icon={<Flame size={14} />} />
-                <MacroPill label="Protein" value={mealPlan.dailyProteinG} unit="g" color="text-green-600" icon={<Beef size={14} />} />
-                <MacroPill label="Carbs" value={mealPlan.dailyCarbsG} unit="g" color="text-amber-500" icon={<Wheat size={14} />} />
-                <MacroPill label="Fat" value={mealPlan.dailyFatG} unit="g" color="text-blue-500" icon={<Droplets size={14} />} />
+                <MacroPill label="Calories" value={displayCalories} unit="kcal" color="text-primary" icon={<Flame size={14} />} />
+                <MacroPill label="Protein" value={displayProtein} unit="g" color="text-green-600" icon={<Beef size={14} />} />
+                <MacroPill label="Carbs" value={displayCarbs} unit="g" color="text-amber-500" icon={<Wheat size={14} />} />
+                <MacroPill label="Fat" value={displayFat} unit="g" color="text-blue-500" icon={<Droplets size={14} />} />
               </div>
               {mealPlan.proteinShakesPerDay > 0 && (
                 <p className="text-xs text-muted-foreground mt-3">+ {mealPlan.proteinShakesPerDay} protein shake/day</p>

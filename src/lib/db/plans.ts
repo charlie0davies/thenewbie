@@ -37,9 +37,15 @@ export interface MealPlan {
   dailyProteinG: number;
   dailyCarbsG: number;
   dailyFatG: number;
+  restDayCalories?: number;
+  restDayProteinG?: number;
+  restDayCarbsG?: number;
+  restDayFatG?: number;
   dailyWaterMl: number;
   proteinShakesPerDay: number;
-  mealTemplates: MealTemplate[];
+  mealTemplates: MealTemplate[];       // legacy fallback
+  workoutDayMeals?: MealTemplate[];    // meals for training days
+  restDayMeals?: MealTemplate[];       // lighter meals for rest days
 }
 
 export interface MealTemplate {

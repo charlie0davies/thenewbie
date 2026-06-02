@@ -35,6 +35,8 @@ interface FormData {
   weightLbs: string;
   // goals
   goal: string;
+  // extra context
+  extraContext: string;
   // workout
   experience: string;
   workoutType: string;
@@ -272,6 +274,68 @@ function StepDiet({ data, set }: { data: FormData; set: (k: keyof FormData, v: u
   );
 }
 
+// ─── Extra context step ───────────────────────────────────────────────────────
+
+const CONTEXT_CHIPS = [
+  "I've tried keto before",
+  "I have a knee/back injury",
+  "I train at home with dumbbells only",
+  "I'm vegetarian",
+  "I meal prep on Sundays",
+  "I've done Starting Strength before",
+  "I struggle with consistency",
+  "I have a busy schedule",
+  "I already have chicken, rice & veg in",
+];
+
+function StepExtraContext({ data, set }: { data: FormData; set: (k: keyof FormData, v: unknown) => void }) {
+  function addChip(chip: string) {
+    const current = data.extraContext.trim();
+    const newVal = current ? `${current}. ${chip}` : chip;
+    set("extraContext", newVal);
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+        <p className="text-sm font-semibold text-orange-800 mb-1">This is your chance to tell Claude anything</p>
+        <p className="text-xs text-orange-700">
+          Previous training plans, injuries, foods you already have, diets you&apos;ve tried, exact meals you love —
+          the more detail you give, the more personalised your plan will be.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-foreground">Tell us more (optional)</label>
+        <textarea
+          value={data.extraContext}
+          onChange={(e) => set("extraContext", e.target.value)}
+          placeholder={`Examples:\n• "I used to do 5x5 stronglifts but found it boring"\n• "I have oats, chicken breasts and brown rice already"\n• "I tried calorie counting before and gave up after a month"\n• "I have a bad lower back so no deadlifts please"`}
+          rows={7}
+          className="w-full rounded-2xl border border-border bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none placeholder:text-muted-foreground"
+        />
+        <p className="text-xs text-muted-foreground text-right">{data.extraContext.length} chars</p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quick add</p>
+        <div className="flex flex-wrap gap-2">
+          {CONTEXT_CHIPS.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => addChip(chip)}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white border border-border text-foreground hover:border-primary hover:bg-orange-50 transition-all"
+            >
+              + {chip}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
@@ -289,6 +353,7 @@ export default function OnboardingPage() {
     goal: "", experience: "", workoutType: "gym", workoutDays: [1, 3, 5],
     dietaryRestrictions: [], likedFoods: "", dislikedFoods: "",
     mealSimplicity: 2, cookingSkill: "beginner",
+    extraContext: "",
   });
 
   function set(key: keyof FormData, value: unknown) {
@@ -305,11 +370,11 @@ export default function OnboardingPage() {
     }
     if (step === 1) return !!data.goal;
     if (step === 2) return data.experience && data.workoutDays.length > 0 && data.workoutType;
-    return true;
+    return true; // steps 3 and 4 are optional
   }
 
   async function handleNext() {
-    if (step < 3) { setStep((s) => s + 1); return; }
+    if (step < 4) { setStep((s) => s + 1); return; }
 
     setGenerating(true);
     try {
@@ -396,8 +461,20 @@ export default function OnboardingPage() {
     }
   }
 
-  const stepTitles = ["Tell us about yourself", "What's your main goal?", "Your workout preferences", "Your diet preferences"];
-  const stepSubtitles = ["We'll use this to personalise everything", "We'll tailor your plan around this", "Tell us how you like to train", "Help us build meals you'll actually enjoy"];
+  const stepTitles = [
+    "Tell us about yourself",
+    "What's your main goal?",
+    "Your workout preferences",
+    "Your diet preferences",
+    "Anything else? (optional)",
+  ];
+  const stepSubtitles = [
+    "We'll use this to personalise everything",
+    "We'll tailor your plan around this",
+    "Tell us how you like to train",
+    "Help us build meals you'll actually enjoy",
+    "Previous plans, specific foods, injuries — the more you share, the better your plan",
+  ];
 
   if (generating) {
     return (
@@ -428,13 +505,13 @@ export default function OnboardingPage() {
     <main className="min-h-screen bg-background flex flex-col">
       {/* Progress bar */}
       <div className="h-1.5 bg-muted">
-        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${((step + 1) / 4) * 100}%` }} />
+        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${((step + 1) / 5) * 100}%` }} />
       </div>
 
       {/* Step dots */}
       <div className="flex items-center justify-center gap-3 py-5">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className={cn("transition-all rounded-full", i < step ? "w-6 h-2 bg-primary" : i === step ? "w-6 h-2 bg-primary" : "w-2 h-2 bg-border")} />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div key={i} className={cn("transition-all rounded-full", i <= step ? "w-6 h-2 bg-primary" : "w-2 h-2 bg-border")} />
         ))}
       </div>
 
@@ -442,7 +519,7 @@ export default function OnboardingPage() {
       <div className="flex-1 overflow-y-auto pb-32">
         <div className="max-w-lg mx-auto px-5 py-2">
           <div className="mb-6">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Step {step + 1} of 4</p>
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">Step {step + 1} of 5</p>
             <h1 className="text-2xl font-bold">{stepTitles[step]}</h1>
             <p className="text-muted-foreground text-sm mt-1">{stepSubtitles[step]}</p>
           </div>
@@ -451,6 +528,7 @@ export default function OnboardingPage() {
           {step === 1 && <StepGoal data={data} set={set} />}
           {step === 2 && <StepWorkout data={data} set={set} />}
           {step === 3 && <StepDiet data={data} set={set} />}
+          {step === 4 && <StepExtraContext data={data} set={set} />}
 
           {error && (
             <p className="text-sm text-destructive mt-4 p-3 bg-red-50 rounded-xl border border-red-100">{error}</p>
@@ -467,7 +545,7 @@ export default function OnboardingPage() {
             </Button>
           )}
           <Button size="lg" onClick={handleNext} disabled={!canProceed()} className="flex-1 flex items-center justify-center gap-1">
-            {step === 3 ? "Build my plan ✨" : <><span>Continue</span><ChevronRight size={18} /></>}
+            {step === 4 ? "Build my plan ✨" : <><span>Continue</span><ChevronRight size={18} /></>}
           </Button>
         </div>
       </div>

@@ -99,10 +99,14 @@ export async function POST(req: NextRequest) {
 
   // ── Call 1: Workout plan ──────────────────────────────────────────────────
 
+  const extraContextNote = body.extraContext
+    ? `\nAdditional context from user: "${body.extraContext}"`
+    : "";
+
   const workoutPrompt = `You are a personal trainer. Create a beginner workout plan as JSON only — no markdown, no explanation.
 
 Profile: ${gender}, age ${age}, ${heightCm}cm, ${weightKg}kg, goal: ${goal}, experience: ${experience}, equipment: ${workoutType}.
-Workout days (0=Sun): ${workoutDayNames}. Rest days: the others.
+Workout days (0=Sun): ${workoutDayNames}. Rest days: the others.${extraContextNote}
 
 Return ONLY this JSON (all 7 days must be included):
 {
@@ -128,30 +132,52 @@ Return ONLY this JSON (all 7 days must be included):
 
 Rules: 4-5 exercises on workout days, empty array on rest days. Beginner-appropriate weights.`;
 
-  // ── Call 2: Meal plan ─────────────────────────────────────────────────────
+  // ── Call 2: Meal plan (workout day + rest day meals) ─────────────────────
+
+  const restCalories = Math.round(targetCalories * 0.88); // ~12% fewer on rest days
+  const restCarbsG = Math.round(carbsG * 0.75);           // less carbs on rest days
+  const extraContext = body.extraContext ? `\nExtra info from user: ${body.extraContext}` : "";
 
   const mealPrompt = `You are a nutritionist. Create a UK meal plan as JSON only — no markdown, no explanation.
 
-Profile: ${gender}, age ${age}, goal: ${goal}. Daily targets: ${targetCalories} kcal, ${proteinG}g protein, ${carbsG}g carbs, ${fatG}g fat.
+Profile: ${gender}, age ${age}, goal: ${goal}.
+WORKOUT day targets: ${targetCalories} kcal, ${proteinG}g protein, ${carbsG}g carbs, ${fatG}g fat.
+REST day targets: ${restCalories} kcal, ${proteinG}g protein, ${restCarbsG}g carbs, ${fatG}g fat (fewer carbs, same protein).
 Restrictions: ${dietaryRestrictions?.join(", ") || "none"}. Likes: ${likedFoods || "anything"}. Dislikes: ${dislikedFoods || "none"}.
-Simplicity: ${mealSimplicity}/5. Cooking skill: ${cookingSkill}.
+Simplicity: ${mealSimplicity}/5. Cooking skill: ${cookingSkill}.${extraContext}
 
-Return ONLY this JSON (3 meals + optional snack):
+Return ONLY this JSON. Each array must have 3-4 meals. IDs must be unique across both arrays:
 {
   "dailyCalories": ${targetCalories},
   "dailyProteinG": ${proteinG},
   "dailyCarbsG": ${carbsG},
   "dailyFatG": ${fatG},
+  "restDayCalories": ${restCalories},
+  "restDayProteinG": ${proteinG},
+  "restDayCarbsG": ${restCarbsG},
+  "restDayFatG": ${fatG},
   "dailyWaterMl": 2500,
   "proteinShakesPerDay": ${goal === "build_muscle" ? 1 : 0},
-  "mealTemplates": [
+  "mealTemplates": [],
+  "workoutDayMeals": [
     {
-      "id": "<unique_id>",
+      "id": "wd_<unique>",
       "name": "<meal name>",
       "time": "<breakfast|lunch|dinner|snack>",
-      "ingredients": [
-        { "name": "<ingredient>", "amountG": <number>, "unit": "<g|ml|tbsp|piece>" }
-      ],
+      "ingredients": [{ "name": "<ingredient>", "amountG": <number>, "unit": "<g|ml|tbsp|piece>" }],
+      "calories": <number>,
+      "proteinG": <number>,
+      "carbsG": <number>,
+      "fatG": <number>,
+      "prepMinutes": <number>
+    }
+  ],
+  "restDayMeals": [
+    {
+      "id": "rd_<unique>",
+      "name": "<meal name>",
+      "time": "<breakfast|lunch|dinner|snack>",
+      "ingredients": [{ "name": "<ingredient>", "amountG": <number>, "unit": "<g|ml|tbsp|piece>" }],
       "calories": <number>,
       "proteinG": <number>,
       "carbsG": <number>,
@@ -161,7 +187,7 @@ Return ONLY this JSON (3 meals + optional snack):
   ]
 }
 
-Rules: realistic UK ingredients, totals must roughly match daily targets, max 6 ingredients per meal.`;
+Rules: realistic UK ingredients, max 6 ingredients per meal. workoutDayMeals should be higher carb/protein to fuel training. restDayMeals should be lighter and more varied. Both sets must match their respective calorie targets.`;
 
   // ── Call 3: Shopping list ─────────────────────────────────────────────────
 

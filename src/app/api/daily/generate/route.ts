@@ -53,9 +53,20 @@ export async function POST(req: NextRequest) {
 
     const items: DailyPlanItem[] = [];
 
-    // Add meals in time order
+    // Pick workout vs rest day meals
+    const dayOfWeek = new Date(date + "T12:00:00").getDay();
+    const dayRoutineForMeals = workoutPlan?.weeklyRoutine?.find((d) => d.dayOfWeek === dayOfWeek);
+    const isWorkoutDay = dayRoutineForMeals?.isWorkoutDay ?? false;
+
+    const mealSource =
+      isWorkoutDay && mealPlan.workoutDayMeals?.length
+        ? mealPlan.workoutDayMeals
+        : !isWorkoutDay && mealPlan.restDayMeals?.length
+        ? mealPlan.restDayMeals
+        : mealPlan.mealTemplates || [];
+
     const mealOrder = ["breakfast", "lunch", "snack", "dinner"];
-    const sorted = [...(mealPlan.mealTemplates || [])].sort(
+    const sorted = [...mealSource].sort(
       (a, b) => mealOrder.indexOf(a.time) - mealOrder.indexOf(b.time)
     );
     for (const meal of sorted) {
@@ -73,10 +84,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Add workout exercises if today is a workout day
+    // Add workout exercises if today is a workout day (reuse dayRoutineForMeals)
     if (workoutPlan) {
-      const dayOfWeek = new Date(date + "T12:00:00").getDay();
-      const dayRoutine = workoutPlan.weeklyRoutine?.find((d) => d.dayOfWeek === dayOfWeek);
+      const dayRoutine = dayRoutineForMeals;
       if (dayRoutine?.isWorkoutDay) {
         for (const ex of dayRoutine.exercises) {
           items.push({
