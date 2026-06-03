@@ -76,7 +76,7 @@ Rules: each URL must use the actual item name encoded for that retailer's search
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2048,
+      max_tokens: 4000,
       messages: [{ role: "user", content: shoppingPrompt }],
     });
     if (msg.stop_reason === "max_tokens") throw new Error("Shopping list response was cut short");

@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 4096,
+      max_tokens: 8000,
       messages: [{ role: "user", content: mealPrompt }],
     });
     if (msg.stop_reason === "max_tokens") throw new Error("Meal plan response was cut short");
