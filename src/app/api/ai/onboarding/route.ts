@@ -95,8 +95,8 @@ Return ONLY this JSON (all 7 days must be included):
 Rules: 4-5 exercises on workout days, empty array on rest days. Beginner-appropriate weights.`;
 
     const msg = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 3000,
       messages: [{ role: "user", content: workoutPrompt }],
     });
     if (msg.stop_reason === "max_tokens") throw new Error("Workout plan response was cut short");
