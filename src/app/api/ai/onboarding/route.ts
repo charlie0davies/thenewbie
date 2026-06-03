@@ -62,8 +62,7 @@ export async function POST(req: NextRequest) {
   // Top-level catch — every code path must return JSON
   try {
   if (!process.env.ANTHROPIC_API_KEY) {
-    const keys = Object.keys(process.env).filter(k => k.includes("ANTHROPIC") || k.includes("API")).join(", ");
-    return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured", presentKeys: keys || "(none)" }, { status: 500 });
+    return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
   }
 
   const userId = await getUserId(req);
