@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { fetchAuthSession } from "aws-amplify/auth/server";
 import { runWithAmplifyServerContext } from "@/lib/auth/amplify-server";
-import { putUser } from "@/lib/db/users";
+import { putUser, updateUser } from "@/lib/db/users";
 import { saveActivePlan } from "@/lib/db/plans";
 import { saveShoppingList } from "@/lib/db/shopping";
 import { calculateTDEE } from "@/lib/utils";
@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
   // Top-level catch — every code path must return JSON
   try {
   if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 });
+    const keys = Object.keys(process.env).filter(k => k.includes("ANTHROPIC") || k.includes("API")).join(", ");
+    return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured", presentKeys: keys || "(none)" }, { status: 500 });
   }
 
   const userId = await getUserId(req);
@@ -203,6 +204,7 @@ Rules: each URL must use the actual item name encoded for that retailer's search
       totalEstimatedCostGbp: (shoppingList.items as { estimatedCostGbp: number }[]).reduce((s, i) => s + i.estimatedCostGbp, 0),
       ...shoppingList,
     });
+    await updateUser(userId, { onboardingComplete: true });
 
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {

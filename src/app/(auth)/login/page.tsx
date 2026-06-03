@@ -25,7 +25,7 @@ function LoginForm() {
       if (result.isSignedIn) {
         const res = await fetch("/api/user");
         const user = res.ok ? await res.json() : null;
-        router.push(user?.userId ? "/today" : "/onboarding");
+        router.push(user?.onboardingComplete ? "/today" : "/onboarding");
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign in failed");

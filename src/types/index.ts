@@ -19,6 +19,7 @@ export interface UserProfile {
   workoutDays: number[]; // 0=Sun, 1=Mon, ... 6=Sat
   targetWeightKg?: number;
   createdAt: string;
+  onboardingComplete?: boolean;
 }
 
 export interface Macros {
