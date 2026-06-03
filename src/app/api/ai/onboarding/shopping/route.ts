@@ -54,9 +54,9 @@ export async function POST(req: NextRequest) {
 
     const shoppingPrompt = `You are a UK nutritionist. Create a one-week shopping list as JSON only — no markdown, no explanation.
 
-The weekly meal plan has these daily meals: breakfast, lunch, dinner${goal === "build_muscle" ? ", protein shake" : ""}.
-Dietary restrictions: ${dietaryRestrictions?.join(", ") || "none"}. Cooking skill: ${cookingSkill}.
-⚠️ NEVER include "${dislikes}" or any ingredient the user dislikes.${extraNote}
+⚠️ ABSOLUTE RULE: NEVER include "${dislikes}" or any ingredient the user dislikes in the shopping list.
+Dietary restrictions: ${dietaryRestrictions?.join(", ") || "none"}.${extraNote}
+${!hasExistingPlan ? `The weekly meal plan has these daily meals: breakfast, lunch, dinner${goal === "build_muscle" ? ", protein shake" : ""}. Cooking skill: ${cookingSkill}.` : ""}
 
 Return ONLY this JSON (10-18 items covering a full week):
 {

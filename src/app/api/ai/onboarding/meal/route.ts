@@ -37,6 +37,79 @@ function parseJSON(raw: string, label: string) {
   }
 }
 
+function buildConversionPrompt(params: {
+  extraContext: string;
+  targetCalories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  restCalories: number;
+  restCarbsG: number;
+  goal: string;
+  restrictions: string;
+  dislikes: string;
+}): string {
+  const { extraContext, targetCalories, proteinG, carbsG, fatG, restCalories, restCarbsG, goal, restrictions, dislikes } = params;
+  return `You are converting a user's existing meal plan into a JSON format. Return ONLY valid JSON — no markdown, no explanation.
+
+⚠️ ABSOLUTE RULES:
+1. NEVER include "${dislikes}" or any of those ingredients in any meal, even if they appear in the user's plan.
+2. Dietary restrictions to honour: ${restrictions || "none"}.
+3. Use their ACTUAL meals from the plan below. Do not invent new meals.
+4. Use plain simple meal names: "Chicken and Rice", "Oats and Yogurt", "Mince and Veg" etc.
+
+THE USER'S EXISTING MEAL PLAN:
+${extraContext}
+
+Convert this into the JSON below. Extract:
+- workoutDayVariants: 3 arrays — use meals from Mon, Tue, Thu as 3 separate workout day variants
+- restDayVariants: 2 arrays — use meals from Wed and Sat/Sun as 2 rest day variants
+- Include snacks where listed (time: "snack")
+- Use the macros already stated in the plan for each meal
+
+{
+  "dailyCalories": ${targetCalories},
+  "dailyProteinG": ${proteinG},
+  "dailyCarbsG": ${carbsG},
+  "dailyFatG": ${fatG},
+  "restDayCalories": ${restCalories},
+  "restDayProteinG": ${proteinG},
+  "restDayCarbsG": ${restCarbsG},
+  "restDayFatG": ${fatG},
+  "dailyWaterMl": 2500,
+  "proteinShakesPerDay": ${goal === "build_muscle" ? 1 : 0},
+  "mealTemplates": [],
+  "workoutDayMeals": [],
+  "restDayMeals": [],
+  "workoutDayVariants": [
+    [<Monday: breakfast obj, lunch obj, dinner obj, snack obj>],
+    [<Tuesday: breakfast obj, lunch obj, dinner obj, snack obj>],
+    [<Thursday: breakfast obj, lunch obj, dinner obj, snack obj>]
+  ],
+  "restDayVariants": [
+    [<Wednesday: breakfast obj, lunch obj, dinner obj, snack obj>],
+    [<Saturday: breakfast obj, lunch obj, dinner obj, snack obj>]
+  ]
+}
+
+Each meal object MUST follow this shape exactly:
+{
+  "id": "unique_snake_case_id",
+  "name": "Simple meal name",
+  "time": "breakfast" | "lunch" | "dinner" | "snack",
+  "ingredients": [
+    { "name": "ingredient", "amountG": <number>, "unit": "g" | "ml" | "piece" | "slice" | "tbsp" | "tsp" }
+  ],
+  "calories": <number from the plan>,
+  "proteinG": <number from the plan>,
+  "carbsG": <number from the plan>,
+  "fatG": <number from the plan>,
+  "prepMinutes": 10
+}
+
+UNIT RULES: eggs → unit "piece", bread → unit "slice", whole fruit → unit "piece", oils/sauces ≤60g → unit "tbsp", everything else → unit "g".`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -63,15 +136,24 @@ export async function POST(req: NextRequest) {
     const restCalories = Math.round(targetCalories * 0.88);
     const restCarbsG = Math.round(carbsG * 0.75);
 
-    const mealPrompt = buildMealPrompt({
-      gender, age, goal, targetCalories, proteinG, carbsG, fatG,
-      restCalories, restCarbsG,
-      weekStartDate: new Date().toISOString().slice(0, 10),
-      dietaryRestrictions, likedFoods, dislikedFoods,
-      mealSimplicity, cookingSkill,
-      extraContext,
-      proteinShakes: goal === "build_muscle" ? 1 : 0,
-    });
+    const hasExistingPlan = extraContext && extraContext.length > 200;
+    const restrictions = dietaryRestrictions?.join(", ") || "none";
+    const dislikes = dislikedFoods || "none";
+
+    const mealPrompt = hasExistingPlan
+      ? buildConversionPrompt({
+          extraContext, targetCalories, proteinG, carbsG, fatG,
+          restCalories, restCarbsG, goal, restrictions, dislikes,
+        })
+      : buildMealPrompt({
+          gender, age, goal, targetCalories, proteinG, carbsG, fatG,
+          restCalories, restCarbsG,
+          weekStartDate: new Date().toISOString().slice(0, 10),
+          dietaryRestrictions, likedFoods, dislikedFoods,
+          mealSimplicity, cookingSkill,
+          extraContext,
+          proteinShakes: goal === "build_muscle" ? 1 : 0,
+        });
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await client.messages.create({
