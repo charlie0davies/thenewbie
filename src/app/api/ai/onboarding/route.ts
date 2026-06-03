@@ -63,12 +63,17 @@ export async function POST(req: NextRequest) {
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const workoutDayNames = (workoutDays as number[]).map((d) => dayNames[d]).join(", ");
     const allDays = [0, 1, 2, 3, 4, 5, 6];
-    const extraContextNote = extraContext ? `\nAdditional context from user: "${extraContext}"` : "";
+    const hasExistingPlan = extraContext && extraContext.length > 200;
+    const extraContextNote = extraContext
+      ? `\n\nUSER'S ADDITIONAL CONTEXT (READ CAREFULLY):\n${extraContext}`
+      : "";
 
-    const workoutPrompt = `You are a personal trainer. Create a beginner workout plan as JSON only — no markdown, no explanation.
+    const workoutPrompt = `You are a personal trainer. Return ONLY valid JSON — no markdown, no explanation.
 
 Profile: ${gender}, age ${age}, ${heightCm}cm, ${weightKg}kg, goal: ${goal}, experience: ${experience}, equipment: ${workoutType}.
-Workout days (0=Sun): ${workoutDayNames}. Rest days: the others.${extraContextNote}
+Workout days (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat): ${workoutDayNames}. Rest days: the others.${extraContextNote}
+
+${hasExistingPlan ? `CRITICAL: The user has provided their existing workout plan above. You MUST replicate it exactly — use the same exercises, sets, reps, and structure. Do not substitute or invent exercises. For days listed as rehab/stretching only, set isWorkoutDay: true and include those movements as exercises. Honour any injury notes (e.g. knee surgery — avoid loading the knee).` : `Rules: 6-10 exercises/movements per workout day (include warm-up, main lifts, and stretches/cool-down). Rest days have empty exercises array. Beginner-appropriate weights.`}
 
 Return ONLY this JSON (all 7 days must be included):
 {
@@ -81,18 +86,16 @@ Return ONLY this JSON (all 7 days must be included):
           "id": "<unique_snake_case>",
           "name": "<exercise>",
           "muscleGroup": "<muscle>",
-          "sets": <2-4>,
-          "reps": "<e.g. 8-12>",
+          "sets": <number>,
+          "reps": "<e.g. 10 or 45 sec>",
           "restSeconds": <60-120>,
           "startingWeightKg": <0 for bodyweight>,
-          "notes": "<one beginner tip>"
+          "notes": "<one tip>"
         }
       ]
     }
   ]
-}
-
-Rules: 4-5 exercises on workout days, empty array on rest days. Beginner-appropriate weights.`;
+}`;
 
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",

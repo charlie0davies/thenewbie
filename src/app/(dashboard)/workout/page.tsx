@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { Dumbbell, Check, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Dumbbell, Check, ChevronDown, ChevronUp, ExternalLink, Plus, Trash2, X } from "lucide-react";
 import type { WorkoutPlan, DayRoutine, PlanExercise } from "@/lib/db/plans";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -14,12 +15,11 @@ const todayDow = new Date().getDay();
 
 // ─── Exercise card ────────────────────────────────────────────────────────────
 
-function ExerciseCard({ exercise }: { exercise: PlanExercise }) {
+function ExerciseCard({ exercise, onDelete }: { exercise: PlanExercise; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
   const [sets, setSets] = useState(
-    Array.from({ length: exercise.sets }, () => ({
-      reps: exercise.reps.split("-")[0] || exercise.reps,
+    Array.from({ length: exercise.sets || 1 }, () => ({
+      reps: exercise.reps?.split("-")[0] || exercise.reps || "10",
       weightKg: String(exercise.startingWeightKg || 0),
       done: false,
     }))
@@ -42,52 +42,55 @@ function ExerciseCard({ exercise }: { exercise: PlanExercise }) {
 
   const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + " exercise form tutorial")}`;
   const allDone = sets.every((s) => s.done);
+  const isBodyweight = !exercise.startingWeightKg || exercise.startingWeightKg === 0;
 
   return (
     <div className={cn("bg-white border rounded-2xl overflow-hidden transition-all", allDone ? "border-green-200" : "border-border")}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between p-4 text-left"
-      >
-        <div className="flex items-center gap-3">
-          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all", allDone ? "bg-green-100" : "bg-orange-50")}>
-            <Dumbbell size={16} className={allDone ? "text-green-500" : "text-primary"} />
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex-1 flex items-center justify-between p-4 text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all", allDone ? "bg-green-100" : "bg-orange-50")}>
+              <Dumbbell size={16} className={allDone ? "text-green-500" : "text-primary"} />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">{exercise.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {exercise.sets} × {exercise.reps} · {exercise.muscleGroup}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-sm">{exercise.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {exercise.sets} × {exercise.reps} · {exercise.muscleGroup}
-            </p>
+          <div className="flex items-center gap-2">
+            {allDone && <Check size={16} className="text-green-500" />}
+            <span className="text-xs text-muted-foreground">{isBodyweight ? "BW" : `${exercise.startingWeightKg}kg`}</span>
+            {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {allDone && <Check size={16} className="text-green-500" />}
-          <span className="text-xs text-muted-foreground">{exercise.startingWeightKg ? `${exercise.startingWeightKg}kg` : "BW"}</span>
-          {open ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
-        </div>
-      </button>
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="pr-4 pl-1 text-muted-foreground hover:text-destructive transition-colors"
+          title="Remove exercise"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
 
       {open && (
         <div className="px-4 pb-4 border-t border-border">
-          {/* Notes + links */}
           <div className="flex items-start justify-between gap-2 mt-3 mb-3">
             <div className="flex-1">
-              {exercise.notes && (
-                <p className="text-xs text-muted-foreground italic">{exercise.notes}</p>
-              )}
+              {exercise.notes && <p className="text-xs text-muted-foreground italic">{exercise.notes}</p>}
             </div>
-            <a
-              href={ytUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-medium text-red-500 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100 shrink-0"
-            >
+            <a href={ytUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-medium text-red-500 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100 shrink-0">
               <ExternalLink size={12} /> How-to
             </a>
           </div>
 
-          {/* Set logger */}
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground font-medium px-1">
               <span>Set</span><span>Reps</span><span>Weight (kg)</span>
@@ -103,13 +106,9 @@ function ExerciseCard({ exercise }: { exercise: PlanExercise }) {
                     onChange={(e) => setSets((p) => p.map((s, j) => j === i ? { ...s, weightKg: e.target.value } : s))}
                     className="h-9 text-sm" />
                 </div>
-                <button
-                  onClick={() => handleLogSet(i)}
-                  className={cn(
-                    "w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-all",
-                    set.done ? "bg-primary border-primary text-white" : "border-border text-muted-foreground hover:border-primary"
-                  )}
-                >
+                <button onClick={() => handleLogSet(i)}
+                  className={cn("w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-all",
+                    set.done ? "bg-primary border-primary text-white" : "border-border text-muted-foreground hover:border-primary")}>
                   <Check size={16} />
                 </button>
               </div>
@@ -121,12 +120,70 @@ function ExerciseCard({ exercise }: { exercise: PlanExercise }) {
   );
 }
 
+// ─── Add exercise panel ───────────────────────────────────────────────────────
+
+interface AddExerciseFormData {
+  name: string;
+  muscleGroup: string;
+  sets: string;
+  reps: string;
+  weightKg: string;
+  notes: string;
+}
+
+function AddExercisePanel({ onAdd, onClose }: { onAdd: (ex: PlanExercise) => void; onClose: () => void }) {
+  const [form, setForm] = useState<AddExerciseFormData>({
+    name: "", muscleGroup: "", sets: "3", reps: "10", weightKg: "0", notes: "",
+  });
+
+  function set(k: keyof AddExerciseFormData, v: string) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  function handleAdd() {
+    if (!form.name.trim()) return;
+    const exercise: PlanExercise = {
+      id: form.name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
+      name: form.name.trim(),
+      muscleGroup: form.muscleGroup.trim() || "General",
+      sets: Number(form.sets) || 3,
+      reps: form.reps.trim() || "10",
+      restSeconds: 90,
+      startingWeightKg: Number(form.weightKg) || 0,
+      notes: form.notes.trim() || undefined,
+    };
+    onAdd(exercise);
+  }
+
+  return (
+    <div className="bg-white border border-primary/30 rounded-2xl p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className="font-semibold text-sm">Add exercise</p>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+      </div>
+      <Input label="Exercise name" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Leg Press" />
+      <div className="grid grid-cols-2 gap-2">
+        <Input label="Muscle group" value={form.muscleGroup} onChange={(e) => set("muscleGroup", e.target.value)} placeholder="e.g. Legs" />
+        <Input label="Sets" type="number" inputMode="numeric" value={form.sets} onChange={(e) => set("sets", e.target.value)} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Input label="Reps / duration" value={form.reps} onChange={(e) => set("reps", e.target.value)} placeholder="e.g. 10 or 45 sec" />
+        <Input label="Starting weight (kg)" type="number" inputMode="decimal" value={form.weightKg} onChange={(e) => set("weightKg", e.target.value)} hint="0=BW" />
+      </div>
+      <Input label="Notes (optional)" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="e.g. Keep back straight" />
+      <Button size="md" onClick={handleAdd} disabled={!form.name.trim()}>Add to today</Button>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkoutPage() {
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [selectedDay, setSelectedDay] = useState(todayDow);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
     fetch("/api/plans?type=workout")
@@ -135,9 +192,51 @@ export default function WorkoutPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const dayRoutine: DayRoutine | undefined = plan?.weeklyRoutine?.find(
-    (d) => d.dayOfWeek === selectedDay
-  );
+  const savePlan = useCallback(async (updated: WorkoutPlan) => {
+    setSaving(true);
+    try {
+      await fetch("/api/plans", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "workout", plan: updated }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  function handleDeleteExercise(exerciseId: string) {
+    if (!plan) return;
+    const updated: WorkoutPlan = {
+      ...plan,
+      weeklyRoutine: plan.weeklyRoutine.map((day) =>
+        day.dayOfWeek === selectedDay
+          ? { ...day, exercises: day.exercises.filter((e) => e.id !== exerciseId) }
+          : day
+      ),
+    };
+    setPlan(updated);
+    savePlan(updated);
+  }
+
+  function handleAddExercise(exercise: PlanExercise) {
+    if (!plan) return;
+    const updated: WorkoutPlan = {
+      ...plan,
+      weeklyRoutine: plan.weeklyRoutine.map((day) =>
+        day.dayOfWeek === selectedDay
+          ? { ...day, exercises: [...day.exercises, exercise], isWorkoutDay: true }
+          : day
+      ),
+    };
+    setPlan(updated);
+    savePlan(updated);
+    setShowAdd(false);
+  }
+
+  const dayRoutine: DayRoutine | undefined = plan?.weeklyRoutine?.find((d) => d.dayOfWeek === selectedDay);
+  const hasExercises = (dayRoutine?.exercises?.length ?? 0) > 0;
+  const isRestDay = !dayRoutine?.isWorkoutDay && !hasExercises;
 
   if (loading) {
     return (
@@ -149,56 +248,62 @@ export default function WorkoutPage() {
 
   return (
     <div>
-      <Header title="Workout" subtitle="Track your sets and reps" />
+      <Header title="Workout" subtitle={saving ? "Saving..." : "Track your sets and reps"} />
 
-      {/* Day selector — grid fits all 7 on one line */}
       <div className="grid grid-cols-7 gap-1 px-4 pb-4">
         {DAY_NAMES.map((name, i) => {
-          const isWorkoutDay = plan?.weeklyRoutine?.find((d) => d.dayOfWeek === i)?.isWorkoutDay;
+          const routine = plan?.weeklyRoutine?.find((d) => d.dayOfWeek === i);
+          const isActive = routine?.isWorkoutDay || (routine?.exercises?.length ?? 0) > 0;
           const isSelected = selectedDay === i;
           const isToday = i === todayDow;
           return (
-            <button
-              key={i}
-              onClick={() => setSelectedDay(i)}
-              className={cn(
-                "flex flex-col items-center gap-0.5 py-2 rounded-xl border transition-all",
+            <button key={i} onClick={() => { setSelectedDay(i); setShowAdd(false); }}
+              className={cn("flex flex-col items-center gap-0.5 py-2 rounded-xl border transition-all",
                 isSelected ? "bg-primary border-primary text-white" :
                 isToday ? "border-primary/40 bg-orange-50 text-primary" :
                 "border-border bg-white text-muted-foreground"
-              )}
-            >
+              )}>
               <span className="text-xs font-semibold">{DAY_SHORT[i]}</span>
-              <span className={cn("text-[9px]", isSelected ? "text-white/80" : "text-muted-foreground")}>
-                {name}
-              </span>
-              {isWorkoutDay && (
-                <div className={cn("w-1 h-1 rounded-full", isSelected ? "bg-white" : "bg-primary")} />
-              )}
+              <span className={cn("text-[9px]", isSelected ? "text-white/80" : "text-muted-foreground")}>{name}</span>
+              {isActive && <div className={cn("w-1 h-1 rounded-full", isSelected ? "bg-white" : "bg-primary")} />}
             </button>
           );
         })}
       </div>
 
-      <div className="px-4 flex flex-col gap-3">
+      <div className="px-4 flex flex-col gap-3 pb-6">
         {!plan ? (
           <Card className="text-center py-8">
             <p className="text-muted-foreground text-sm">Complete onboarding to see your workout plan.</p>
           </Card>
-        ) : !dayRoutine || !dayRoutine.isWorkoutDay ? (
-          <Card className="text-center py-8">
-            <div className="text-4xl mb-3">🛋️</div>
-            <p className="font-semibold">Rest day</p>
-            <p className="text-sm text-muted-foreground mt-1">Recovery is just as important as training.</p>
-          </Card>
+        ) : isRestDay ? (
+          <>
+            <Card className="text-center py-8">
+              <div className="text-4xl mb-3">🛋️</div>
+              <p className="font-semibold">Rest day</p>
+              <p className="text-sm text-muted-foreground mt-1">Recovery is just as important as training.</p>
+            </Card>
+            <button onClick={() => setShowAdd(true)}
+              className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-border text-sm text-muted-foreground hover:border-primary hover:text-primary transition-all">
+              <Plus size={16} /> Add exercise to this day
+            </button>
+          </>
         ) : (
           <>
             <p className="text-xs text-muted-foreground px-1">
-              {dayRoutine.exercises.length} exercises · tap to log sets · How-to links included
+              {dayRoutine?.exercises.length ?? 0} exercises · tap to log sets
             </p>
-            {dayRoutine.exercises.map((ex) => (
-              <ExerciseCard key={ex.id} exercise={ex} />
+            {dayRoutine?.exercises.map((ex) => (
+              <ExerciseCard key={ex.id} exercise={ex} onDelete={() => handleDeleteExercise(ex.id)} />
             ))}
+            {showAdd ? (
+              <AddExercisePanel onAdd={handleAddExercise} onClose={() => setShowAdd(false)} />
+            ) : (
+              <button onClick={() => setShowAdd(true)}
+                className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-border text-sm text-muted-foreground hover:border-primary hover:text-primary transition-all">
+                <Plus size={16} /> Add exercise
+              </button>
+            )}
           </>
         )}
       </div>

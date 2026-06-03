@@ -45,12 +45,18 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
     const body = await req.json();
-    const { goal, dietaryRestrictions, cookingSkill } = body;
+    const { goal, dietaryRestrictions, cookingSkill, dislikedFoods, extraContext } = body;
+    const dislikes = dislikedFoods || "none";
+    const hasExistingPlan = extraContext && extraContext.length > 200;
+    const extraNote = hasExistingPlan
+      ? `\nThe user has provided their existing meal plan below — base the shopping list on those specific meals and ingredients:\n${extraContext}`
+      : "";
 
     const shoppingPrompt = `You are a UK nutritionist. Create a one-week shopping list as JSON only — no markdown, no explanation.
 
 The weekly meal plan has these daily meals: breakfast, lunch, dinner${goal === "build_muscle" ? ", protein shake" : ""}.
 Dietary restrictions: ${dietaryRestrictions?.join(", ") || "none"}. Cooking skill: ${cookingSkill}.
+⚠️ NEVER include "${dislikes}" or any ingredient the user dislikes.${extraNote}
 
 Return ONLY this JSON (10-18 items covering a full week):
 {

@@ -348,13 +348,13 @@ export default function ProgressPage() {
       <Header title="Progress" />
 
       {/* Tabs */}
-      <div className="flex gap-1 px-4 pb-4 overflow-x-auto scrollbar-none">
+      <div className="grid grid-cols-4 gap-1 px-4 pb-4">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              "px-4 py-2 rounded-xl text-sm font-medium border whitespace-nowrap transition-all",
+              "py-2 rounded-xl text-xs font-medium border transition-all",
               tab === t.id ? "bg-primary border-primary text-white" : "bg-white border-border text-muted-foreground"
             )}
           >

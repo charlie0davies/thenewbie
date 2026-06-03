@@ -22,7 +22,8 @@ export function buildMealPrompt(p: MealPromptParams): string {
   const restrictions = p.dietaryRestrictions?.join(", ") || "none";
   const likes = p.likedFoods || "no preference";
   const dislikes = p.dislikedFoods || "none";
-  const extra = p.extraContext ? `\nUser notes: ${p.extraContext}` : "";
+  const hasExistingPlan = p.extraContext && p.extraContext.length > 200;
+  const extra = p.extraContext ? `\n\nUSER'S ADDITIONAL CONTEXT (READ CAREFULLY):\n${p.extraContext}` : "";
   const isVeg = p.dietaryRestrictions?.some((r) =>
     ["vegetarian", "vegan"].includes(r.toLowerCase())
   );
@@ -42,6 +43,12 @@ Workout-day calorie target: ${p.targetCalories} kcal | ${p.proteinG}g protein | 
 Rest-day calorie target: ${p.restCalories} kcal | ${p.proteinG}g protein | ${p.restCarbsG}g carbs | ${p.fatG}g fat
 Dietary restrictions: ${restrictions} | Likes: ${likes} | Dislikes: ${dislikes}
 Simplicity: ${p.mealSimplicity ?? 2}/5 | Cooking skill: ${p.cookingSkill ?? "beginner"}${extra}
+
+⚠️ ABSOLUTE RULES — NEVER BREAK THESE:
+1. NEVER include any ingredient from the dislikes list ("${dislikes}") in ANY meal under ANY circumstance.
+2. Honour ALL dietary restrictions: ${restrictions}.
+3. Use plain, simple meal names — e.g. "Chicken and Rice", "Oats and Yogurt", "Mince and Veg". Never use fancy restaurant-style names like "Bowl", "Salad", or hyphenated descriptors.
+${hasExistingPlan ? `4. CRITICAL: The user has provided their existing meal plan above. Replicate those exact meals as your variants — same ingredients, same structure. Do not invent new meals when the user has already specified what they eat.` : ""}
 
 ━━━ VARIETY RULES — THIS IS THE MOST IMPORTANT PART ━━━
 Each variant MUST use a completely different main protein AND different ingredients.
