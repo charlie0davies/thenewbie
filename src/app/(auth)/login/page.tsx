@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { signIn } from "aws-amplify/auth";
+import { signIn, signOut } from "aws-amplify/auth";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 
@@ -19,12 +19,13 @@ function LoginForm() {
     setError("");
     setLoading(true);
     try {
+      // Clear any stale session before signing in
+      await signOut().catch(() => {});
       const result = await signIn({ username: form.email, password: form.password });
       if (result.isSignedIn) {
-        // Check whether the user has completed onboarding
         const res = await fetch("/api/user");
-        const user = await res.json();
-        router.push(user ? "/today" : "/onboarding");
+        const user = res.ok ? await res.json() : null;
+        router.push(user?.userId ? "/today" : "/onboarding");
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sign in failed");

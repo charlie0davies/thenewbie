@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
 
   const user = await getUser(userId);
-  return NextResponse.json(user);
+  return NextResponse.json(user ?? null);
 }
 
 export async function PUT(req: NextRequest) {
