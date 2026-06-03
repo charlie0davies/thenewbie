@@ -407,45 +407,54 @@ export default function OnboardingPage() {
           : Number(data.targetWeight);
       }
 
-      const res = await fetch("/api/ai/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: data.name,
-          email: user.signInDetails?.loginId || "",
-          gender: data.gender,
-          age: Number(data.age),
-          heightCm,
-          weightKg,
-          targetWeightKg,
-          goal: data.goal,
-          experience: data.experience,
-          workoutType: data.workoutType,
-          workoutDays: data.workoutDays,
-          dietaryRestrictions: data.dietaryRestrictions,
-          likedFoods: data.likedFoods,
-          dislikedFoods: data.dislikedFoods,
-          mealSimplicity: data.mealSimplicity,
-          cookingSkill: data.cookingSkill,
-        }),
+      const payload = JSON.stringify({
+        name: data.name,
+        email: user.signInDetails?.loginId || "",
+        gender: data.gender,
+        age: Number(data.age),
+        heightCm,
+        weightKg,
+        targetWeightKg,
+        goal: data.goal,
+        experience: data.experience,
+        workoutType: data.workoutType,
+        workoutDays: data.workoutDays,
+        dietaryRestrictions: data.dietaryRestrictions,
+        likedFoods: data.likedFoods,
+        dislikedFoods: data.dislikedFoods,
+        mealSimplicity: data.mealSimplicity,
+        cookingSkill: data.cookingSkill,
+        extraContext: data.extraContext,
       });
+      const fetchOpts = { method: "POST", headers: { "Content-Type": "application/json" }, body: payload };
+
+      const [workoutRes, mealRes, shoppingRes] = await Promise.all([
+        fetch("/api/ai/onboarding", fetchOpts),
+        fetch("/api/ai/onboarding/meal", fetchOpts),
+        fetch("/api/ai/onboarding/shopping", fetchOpts),
+      ]);
 
       clearInterval(interval);
 
-      if (!res.ok) {
-        // Safely parse error — server might return non-JSON on crash
-        let errMsg = `Server error ${res.status}`;
-        try {
-          const contentType = res.headers.get("content-type") || "";
-          if (contentType.includes("application/json")) {
-            const body = await res.json();
-            errMsg = body.error || errMsg;
-          } else {
-            errMsg = await res.text().then((t) => t.slice(0, 200)) || errMsg;
-          }
-        } catch { /* leave default message */ }
-        throw new Error(errMsg);
+      for (const res of [workoutRes, mealRes, shoppingRes]) {
+        if (!res.ok) {
+          let errMsg = `Server error ${res.status}`;
+          try {
+            const ct = res.headers.get("content-type") || "";
+            if (ct.includes("application/json")) {
+              const b = await res.json();
+              errMsg = b.error || errMsg;
+            }
+          } catch { /* leave default */ }
+          throw new Error(errMsg);
+        }
       }
+
+      await fetch("/api/user", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onboardingComplete: true }),
+      });
 
       // Pre-generate today's daily plan so it's ready immediately
       await fetch("/api/daily/generate", {
