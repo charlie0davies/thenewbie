@@ -16,10 +16,13 @@ import {
   ChevronUp,
   Pencil,
   ChevronRight,
+  Camera,
+  Flame,
 } from "lucide-react";
 import type { DailyRecord, DailyPlanItem } from "@/lib/db/daily";
 import { formatIngredient } from "@/lib/formatIngredient";
 import type { UserProfile } from "@/types";
+import { useRef } from "react";
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
@@ -502,15 +505,42 @@ function WaterTracker({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+interface ScanResult { meal: string; calories: number; proteinG: number; carbsG: number; fatG: number; }
+
+function resizeForScan(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82).split(",")[1]);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 export default function TodayPage() {
   const [record, setRecord] = useState<DailyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
+  const [streak, setStreak] = useState(0);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
+  const [weeklySummary, setWeeklySummary] = useState<{ avgCals: number; workoutDays: number; weightChange: string | null } | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/user")
       .then((r) => r.json())
-      .then((u: UserProfile | null) => { if (u?.name) setUserName(u.name); })
+      .then((u: UserProfile | null) => {
+        if (u?.name) setUserName(u.name);
+        if (u?.currentStreak) setStreak(u.currentStreak);
+      })
       .catch(() => {});
   }, []);
 
@@ -570,6 +600,64 @@ export default function TodayPage() {
         ? { ...r, items: r.items.map((i) => i.id === itemId ? { ...i, ...updates } : i) }
         : null
     );
+  }
+
+  async function handleScanFood(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const imageBase64 = await resizeForScan(file);
+      const res = await fetch("/api/ai/scan-food", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64, mediaType: file.type }),
+      });
+      if (res.ok) setScanResult(await res.json());
+    } finally {
+      setScanning(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleLogScan() {
+    if (!scanResult) return;
+    const item: DailyPlanItem = {
+      id: `scan_${Date.now()}`,
+      type: "meal",
+      label: scanResult.meal,
+      detail: `${scanResult.calories} kcal · ${scanResult.proteinG}g protein`,
+      calories: scanResult.calories,
+      proteinG: scanResult.proteinG,
+      carbsG: scanResult.carbsG,
+      fatG: scanResult.fatG,
+      completed: true,
+    } as DailyPlanItem;
+    await fetch(`/api/daily/${today}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add_item", item }),
+    });
+    setRecord((r) => r ? { ...r, items: [...r.items, item] } : null);
+    setScanResult(null);
+  }
+
+  async function loadWeeklySummary() {
+    if (weeklySummary) return;
+    try {
+      const res = await fetch("/api/progress/summary");
+      const data = await res.json();
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const recentNutrition = (data.nutrition || []).filter((d: { date: string }) => d.date >= sevenDaysAgo);
+      const avgCals = recentNutrition.length
+        ? Math.round(recentNutrition.reduce((s: number, d: { calories: number }) => s + d.calories, 0) / recentNutrition.length)
+        : 0;
+      const workoutDays = Object.values(data.exercises || {}).flat().filter(
+        (e) => (e as { date: string }).date >= sevenDaysAgo
+      ).length;
+      setWeeklySummary({ avgCals, workoutDays, weightChange: null });
+    } catch { /* noop */ }
   }
 
   async function handleAddWater(ml: number) {
@@ -653,6 +741,12 @@ export default function TodayPage() {
                   <p className="text-sm text-muted-foreground">
                     {completedCount} of {totalCount} tasks complete
                   </p>
+                  {streak > 0 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Flame size={12} className="text-orange-500" />
+                      <span className="text-xs font-semibold text-orange-500">{streak} day streak</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -660,9 +754,28 @@ export default function TodayPage() {
             {/* Meals */}
             {meals.length > 0 && (
               <div className="flex flex-col gap-2">
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-1">
-                  Meals
-                </h2>
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Meals</h2>
+                  <button
+                    onClick={() => scanInputRef.current?.click()}
+                    className="flex items-center gap-1 text-xs text-primary font-medium"
+                  >
+                    <Camera size={13} /> {scanning ? "Scanning…" : "Scan food"}
+                  </button>
+                  <input ref={scanInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleScanFood} />
+                </div>
+                {scanResult && (
+                  <div className="bg-green-50 border border-green-100 rounded-2xl p-3 flex flex-col gap-2">
+                    <div>
+                      <p className="font-semibold text-sm">{scanResult.meal}</p>
+                      <p className="text-xs text-muted-foreground">{scanResult.calories} kcal · P {scanResult.proteinG}g · C {scanResult.carbsG}g · F {scanResult.fatG}g</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={handleLogScan} className="flex-1 py-2 text-xs font-semibold bg-primary text-white rounded-xl">Log to today</button>
+                      <button onClick={() => setScanResult(null)} className="flex-1 py-2 text-xs font-medium border border-border rounded-xl text-muted-foreground">Dismiss</button>
+                    </div>
+                  </div>
+                )}
                 {meals.map((item) => (
                   <ItemRow key={item.id} item={item} onToggle={handleToggle} onUpdateItem={handleUpdateItem} />
                 ))}
@@ -687,6 +800,42 @@ export default function TodayPage() {
               target={record.waterMlTarget}
               onAdd={handleAddWater}
             />
+
+            {/* Weekly summary */}
+            <button
+              onClick={() => { setWeeklyOpen((o) => !o); if (!weeklyOpen) loadWeeklySummary(); }}
+              className="w-full flex items-center justify-between px-4 py-3 bg-card border border-border rounded-2xl text-left"
+            >
+              <span className="text-sm font-semibold">Last 7 days</span>
+              {weeklyOpen ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+            </button>
+            {weeklyOpen && (
+              <Card className="flex flex-col gap-3">
+                {weeklySummary ? (
+                  <div className="flex gap-3">
+                    <div className="flex-1 text-center bg-orange-50 rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground mb-1">Avg calories</p>
+                      <p className="text-xl font-bold text-primary">{weeklySummary.avgCals || "—"}</p>
+                      <p className="text-[10px] text-muted-foreground">kcal/day</p>
+                    </div>
+                    <div className="flex-1 text-center bg-blue-50 rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground mb-1">Workout days</p>
+                      <p className="text-xl font-bold">{weeklySummary.workoutDays}</p>
+                      <p className="text-[10px] text-muted-foreground">of 7 days</p>
+                    </div>
+                    <div className="flex-1 text-center bg-green-50 rounded-xl p-3">
+                      <p className="text-[10px] text-muted-foreground mb-1">Streak</p>
+                      <p className="text-xl font-bold text-green-600">{streak}</p>
+                      <p className="text-[10px] text-muted-foreground">days</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-center py-4">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </Card>
+            )}
           </>
         )}
       </div>

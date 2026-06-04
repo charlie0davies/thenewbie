@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Header from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -11,7 +11,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from "recharts";
-import type { WeightEntry, MeasurementEntry } from "@/lib/db/progress";
+import type { WeightEntry, MeasurementEntry, PhotoEntry } from "@/lib/db/progress";
 import { format, parseISO } from "date-fns";
 
 type Tab = "weight" | "nutrition" | "strength" | "body" | "projections";
@@ -68,10 +68,17 @@ function WeightTab() {
   const previous = weights[weights.length - 2];
   const diff = latest && previous ? latest.weightKg - previous.weightKg : null;
 
-  const chartData = weights.map((w) => ({
-    date: format(parseISO(w.date), "d MMM"),
-    weight: unit === "kg" ? w.weightKg : parseFloat((w.weightKg / 6.35029).toFixed(2)),
-  }));
+  const chartData = weights.map((w, i) => {
+    const windowStart = Math.max(0, i - 6);
+    const window7 = weights.slice(windowStart, i + 1);
+    const avg = window7.reduce((s, x) => s + x.weightKg, 0) / window7.length;
+    const raw = w.weightKg;
+    return {
+      date: format(parseISO(w.date), "d MMM"),
+      weight: unit === "kg" ? raw : parseFloat((raw / 6.35029).toFixed(2)),
+      avg: unit === "kg" ? parseFloat(avg.toFixed(2)) : parseFloat((avg / 6.35029).toFixed(2)),
+    };
+  });
 
   const chartUnit = unit === "kg" ? "kg" : "st";
 
@@ -158,7 +165,8 @@ function WeightTab() {
               <YAxis domain={["dataMin - 1", "dataMax + 1"]} unit={chartUnit} tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={40} />
               <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }}
                 formatter={(v) => [`${v} ${chartUnit}`, "Weight"]} />
-              <Line type="monotone" dataKey="weight" stroke="#f97316" strokeWidth={2} dot={{ fill: "#f97316", r: 4 }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="weight" stroke="#f97316" strokeWidth={2} dot={{ fill: "#f97316", r: 4 }} activeDot={{ r: 6 }} name="Actual" />
+              {chartData.length >= 3 && <Line type="monotone" dataKey="avg" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 2" dot={false} name="7-day avg" />}
             </LineChart>
           </ResponsiveContainer>
         </Card>
@@ -239,7 +247,7 @@ function NutritionTab() {
 // ─── Strength tab ─────────────────────────────────────────────────────────────
 
 function StrengthTab() {
-  const [exercises, setExercises] = useState<Record<string, { date: string; maxWeightKg: number }[]>>({});
+  const [exercises, setExercises] = useState<Record<string, { date: string; maxWeightKg: number; totalVolumeKg: number }[]>>({});
   const [selected, setSelected] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
@@ -265,10 +273,18 @@ function StrengthTab() {
     </Card>
   );
 
-  const chartData = (exercises[selected] || []).map((e) => ({
+  const selectedHistory = exercises[selected] || [];
+  const chartData = selectedHistory.map((e) => ({
     date: format(parseISO(e.date), "d MMM"),
     weight: e.maxWeightKg,
+    volume: e.totalVolumeKg,
   }));
+
+  // Epley 1RM: weight × (1 + reps/30) — approximate from best set
+  const bestEntry = selectedHistory.reduce<{ date: string; maxWeightKg: number; totalVolumeKg: number } | null>(
+    (best, e) => (!best || e.maxWeightKg > best.maxWeightKg ? e : best), null
+  );
+  const estimated1RM = bestEntry ? Math.round(bestEntry.maxWeightKg * (1 + 8 / 30)) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -281,6 +297,21 @@ function StrengthTab() {
           >{name}</button>
         ))}
       </div>
+
+      {estimated1RM !== null && (
+        <div className="flex gap-3">
+          <Card className="flex-1 text-center">
+            <p className="text-[10px] text-muted-foreground mb-1">Est. 1RM</p>
+            <p className="text-2xl font-bold text-primary">{estimated1RM} kg</p>
+            <p className="text-[10px] text-muted-foreground">Epley formula</p>
+          </Card>
+          <Card className="flex-1 text-center">
+            <p className="text-[10px] text-muted-foreground mb-1">Best set</p>
+            <p className="text-2xl font-bold">{bestEntry?.maxWeightKg} kg</p>
+            <p className="text-[10px] text-muted-foreground">{bestEntry ? format(parseISO(bestEntry.date), "d MMM") : ""}</p>
+          </Card>
+        </div>
+      )}
 
       {chartData.length > 1 ? (
         <Card>
@@ -542,7 +573,117 @@ function MeasurementsTab() {
           <p className="text-muted-foreground text-sm">Log your first measurements to start tracking body composition.</p>
         </Card>
       )}
+
+      <PhotosSection />
     </div>
+  );
+}
+
+// ─── Photos section ───────────────────────────────────────────────────────────
+
+function resizeImage(file: File, maxPx = 1024): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82).split(",")[1]);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function PhotosSection() {
+  const [photos, setPhotos] = useState<(PhotoEntry & { url?: string })[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [compare, setCompare] = useState<[number, number] | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/progress/photos")
+      .then((r) => r.json())
+      .then((data) => setPhotos(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const res = await fetch("/api/progress/photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentType: file.type }),
+      });
+      const { uploadUrl } = await res.json();
+      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const updated = await fetch("/api/progress/photos").then((r) => r.json());
+      setPhotos(Array.isArray(updated) ? updated : []);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Progress photos</CardTitle>
+          <button
+            onClick={() => inputRef.current?.click()}
+            className="flex items-center gap-1.5 text-xs font-medium text-primary bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100"
+          >
+            {uploading ? "Uploading…" : "+ Add photo"}
+          </button>
+          <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
+        </div>
+      </CardHeader>
+
+      {photos.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-4">Add your first photo to start tracking visual progress.</p>
+      ) : (
+        <>
+          {compare !== null && (
+            <div className="flex gap-2">
+              {compare.map((idx) => (
+                photos[idx]?.url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={idx} src={photos[idx].url} alt="comparison" className="flex-1 rounded-xl object-cover h-48" />
+                )
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map((p, i) => (
+              p.url && (
+                <button key={p.sortKey} onClick={() => {
+                  if (compare === null) setCompare([i, i]);
+                  else if (compare[0] === i) setCompare(null);
+                  else setCompare([compare[0], i]);
+                }} className={cn("relative rounded-xl overflow-hidden aspect-square border-2 transition-all",
+                  compare && compare.includes(i) ? "border-primary" : "border-transparent"
+                )}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt={p.date} className="w-full h-full object-cover" />
+                  <span className="absolute bottom-0 left-0 right-0 text-[9px] bg-black/40 text-white text-center py-0.5">
+                    {format(parseISO(p.date), "d MMM")}
+                  </span>
+                </button>
+              )
+            ))}
+          </div>
+          {photos.length >= 2 && compare === null && (
+            <p className="text-[10px] text-muted-foreground text-center">Tap two photos to compare side by side</p>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 

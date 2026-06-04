@@ -23,6 +23,9 @@ export interface UserProfile {
   plan?: "free" | "premium";
   coachMessagesUsed?: number;
   coachMessagesMonth?: string; // "YYYY-MM"
+  stripeCustomerId?: string;
+  currentStreak?: number;
+  lastWorkoutDate?: string; // YYYY-MM-DD
 }
 
 export interface Macros {

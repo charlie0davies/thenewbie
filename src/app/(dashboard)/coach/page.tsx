@@ -78,6 +78,7 @@ export default function CoachPage() {
   const [streaming, setStreaming] = useState(false);
   const [messagesUsed, setMessagesUsed] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -241,8 +242,18 @@ export default function CoachPage() {
               <p className="font-semibold text-sm">You&apos;ve used all {FREE_LIMIT} free messages</p>
               <p className="text-xs text-muted-foreground mt-0.5">Resets on the 1st of next month</p>
             </div>
-            <button className="px-6 py-2.5 bg-primary text-white text-sm font-semibold rounded-2xl active:scale-95 transition-all">
-              Upgrade to Premium — 50 messages/month
+            <button
+              disabled={upgrading}
+              onClick={async () => {
+                setUpgrading(true);
+                const res = await fetch("/api/stripe/checkout", { method: "POST" });
+                const data = await res.json();
+                if (data.url) window.location.href = data.url;
+                else setUpgrading(false);
+              }}
+              className="px-6 py-2.5 bg-primary text-white text-sm font-semibold rounded-2xl active:scale-95 transition-all disabled:opacity-60"
+            >
+              {upgrading ? "Loading…" : "Upgrade to Premium — 50 messages/month"}
             </button>
           </div>
         ) : (

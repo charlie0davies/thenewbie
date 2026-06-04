@@ -35,7 +35,16 @@ export interface WorkoutLogEntry {
   sets: { reps: number; weightKg: number }[];
 }
 
-export type ProgressEntry = WeightEntry | WorkoutLogEntry | MeasurementEntry;
+export interface PhotoEntry {
+  userId: string;
+  sortKey: string; // PHOTO#<ISO timestamp>
+  type: "photo";
+  date: string;
+  s3Key: string;
+  caption?: string;
+}
+
+export type ProgressEntry = WeightEntry | WorkoutLogEntry | MeasurementEntry | PhotoEntry;
 
 export async function logWeight(
   userId: string,
@@ -93,6 +102,43 @@ export async function getWeightHistory(
     })
   );
   return Items as WeightEntry[];
+}
+
+export async function logPhoto(
+  userId: string,
+  s3Key: string,
+  caption?: string,
+  date?: string
+): Promise<string> {
+  const now = new Date();
+  const isoDate = date || now.toISOString().slice(0, 10);
+  const sortKey = `PHOTO#${now.toISOString()}`;
+  const entry: PhotoEntry = {
+    userId,
+    sortKey,
+    type: "photo",
+    date: isoDate,
+    s3Key,
+    ...(caption ? { caption } : {}),
+  };
+  await db.send(new PutCommand({ TableName: Tables.progress, Item: entry }));
+  return sortKey;
+}
+
+export async function getPhotoHistory(
+  userId: string,
+  limit = 20
+): Promise<PhotoEntry[]> {
+  const { Items = [] } = await db.send(
+    new QueryCommand({
+      TableName: Tables.progress,
+      KeyConditionExpression: "userId = :uid AND begins_with(sortKey, :prefix)",
+      ExpressionAttributeValues: { ":uid": userId, ":prefix": "PHOTO#" },
+      ScanIndexForward: false,
+      Limit: limit,
+    })
+  );
+  return Items as PhotoEntry[];
 }
 
 export async function logMeasurement(

@@ -9,6 +9,7 @@ import {
   logMeasurement,
   getMeasurementHistory,
 } from "@/lib/db/progress";
+import { getUser, updateUser } from "@/lib/db/users";
 
 async function getUserId(req: NextRequest) {
   const res = NextResponse.next();
@@ -50,6 +51,13 @@ export async function POST(req: NextRequest) {
     await logWeight(userId, body.weightKg, body.date);
   } else if (body.type === "workout") {
     await logWorkout(userId, body.exerciseId, body.exerciseName, body.sets, body.date);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const user = await getUser(userId);
+    if (user && user.lastWorkoutDate !== todayStr) {
+      const streak = user.lastWorkoutDate === yesterdayStr ? (user.currentStreak ?? 0) + 1 : 1;
+      await updateUser(userId, { currentStreak: streak, lastWorkoutDate: todayStr });
+    }
   } else if (body.type === "measurement") {
     const { type: _, date, ...measurements } = body;
     await logMeasurement(userId, measurements, date);

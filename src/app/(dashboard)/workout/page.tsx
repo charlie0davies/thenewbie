@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
@@ -32,6 +32,21 @@ function ExerciseCard({ exercise, onDelete }: { exercise: PlanExercise; onDelete
       done: false,
     }))
   );
+  const [restTimer, setRestTimer] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  function startRest(seconds: number) {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setRestTimer(seconds);
+    timerRef.current = setInterval(() => {
+      setRestTimer((prev) => {
+        if (prev === null || prev <= 1) { clearInterval(timerRef.current!); return null; }
+        return prev - 1;
+      });
+    }, 1000);
+  }
 
   async function handleLogSet(i: number) {
     const set = sets[i];
@@ -46,6 +61,8 @@ function ExerciseCard({ exercise, onDelete }: { exercise: PlanExercise; onDelete
       }),
     });
     setSets((prev) => prev.map((s, j) => (j === i ? { ...s, done: true } : s)));
+    const remaining = sets.filter((_, j) => j !== i && !sets[j].done).length;
+    if (remaining > 0) startRest(exercise.restSeconds ?? 90);
   }
 
   const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + " exercise form tutorial")}`;
@@ -102,6 +119,22 @@ function ExerciseCard({ exercise, onDelete }: { exercise: PlanExercise; onDelete
               <ExternalLink size={12} /> How-to
             </a>
           </div>
+
+          {restTimer !== null && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 mt-1">
+              <Timer size={14} className="text-blue-500 shrink-0" />
+              <div className="flex-1">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-medium text-blue-700">Rest — {restTimer}s</span>
+                  <button onClick={() => { clearInterval(timerRef.current!); setRestTimer(null); }} className="text-blue-400 text-[10px]">Skip</button>
+                </div>
+                <div className="h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full transition-all duration-1000"
+                    style={{ width: `${(restTimer / (exercise.restSeconds ?? 90)) * 100}%` }} />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground font-medium px-1">

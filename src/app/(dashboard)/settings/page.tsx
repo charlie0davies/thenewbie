@@ -1,20 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { signOut, getCurrentUser } from "aws-amplify/auth";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signOut } from "aws-amplify/auth";
 import Header from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { LogOut, RotateCcw, Trash2, ChevronRight, User, Shield } from "lucide-react";
+import { LogOut, RotateCcw, Trash2, ChevronRight, User, Shield, Crown, Check } from "lucide-react";
+import type { UserProfile } from "@/types";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [resetting, setResetting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState("");
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [upgradingBilling, setUpgradingBilling] = useState(false);
+  const justUpgraded = searchParams.get("upgraded") === "1";
+
+  useEffect(() => {
+    fetch("/api/user").then((r) => r.json()).then(setUser).catch(() => {});
+  }, []);
+
+  async function handleUpgrade() {
+    setUpgradingBilling(true);
+    const res = await fetch("/api/stripe/checkout", { method: "POST" });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else setUpgradingBilling(false);
+  }
+
+  async function handleManageBilling() {
+    setUpgradingBilling(true);
+    const res = await fetch("/api/stripe/portal", { method: "POST" });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else setUpgradingBilling(false);
+  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -56,6 +81,52 @@ export default function SettingsPage() {
     <div>
       <Header title="Account" subtitle="Manage your account and plan" />
       <div className="px-4 flex flex-col gap-4">
+
+        {/* Premium / plan */}
+        {justUpgraded && (
+          <div className="bg-green-50 border border-green-100 rounded-2xl px-4 py-3 flex items-center gap-3">
+            <Check size={16} className="text-green-600 shrink-0" />
+            <p className="text-sm font-medium text-green-700">Welcome to Premium! Your account has been upgraded.</p>
+          </div>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Crown size={16} className="text-primary" /> Plan
+            </CardTitle>
+          </CardHeader>
+          {user?.plan === "premium" ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 bg-primary text-white text-xs font-bold rounded-full">Premium</span>
+                <span className="text-sm text-muted-foreground">50 AI coach messages/month</span>
+              </div>
+              <Button size="sm" variant="outline" onClick={handleManageBilling} loading={upgradingBilling}>
+                Manage billing
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 bg-muted text-muted-foreground text-xs font-bold rounded-full">Free</span>
+                <span className="text-sm text-muted-foreground">5 AI coach messages/month</span>
+              </div>
+              <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex flex-col gap-2">
+                <p className="text-xs font-semibold">Premium includes:</p>
+                {["50 coach messages/month", "Progress photo storage", "Advanced body composition tracking", "Priority support"].map((f) => (
+                  <div key={f} className="flex items-center gap-2">
+                    <Check size={12} className="text-primary shrink-0" />
+                    <p className="text-xs">{f}</p>
+                  </div>
+                ))}
+              </div>
+              <Button size="md" onClick={handleUpgrade} loading={upgradingBilling} className="w-full">
+                Upgrade to Premium — £6.99/month
+              </Button>
+            </div>
+          )}
+        </Card>
 
         {/* Account info */}
         <Card>
