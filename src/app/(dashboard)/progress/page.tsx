@@ -5,7 +5,7 @@ import Header from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { cn, formatWeight, formatCurrency } from "@/lib/utils";
+import { cn, formatWeight, formatWeightSt, stoneLbsToKg, formatCurrency } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus, Scale, Flame, Dumbbell, Target } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -27,7 +27,10 @@ const TABS: { id: Tab; label: string }[] = [
 
 function WeightTab() {
   const [weights, setWeights] = useState<WeightEntry[]>([]);
+  const [unit, setUnit] = useState<"kg" | "st">("kg");
   const [newWeight, setNewWeight] = useState("");
+  const [stoneInput, setStoneInput] = useState("");
+  const [lbsInput, setLbsInput] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -37,35 +40,83 @@ function WeightTab() {
   }, []);
 
   async function handleLog() {
-    if (!newWeight) return;
+    const weightKg =
+      unit === "kg"
+        ? Number(newWeight)
+        : stoneLbsToKg(Number(stoneInput), Number(lbsInput || 0));
+    if (!weightKg) return;
     setSaving(true);
     await fetch("/api/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "weight", weightKg: Number(newWeight) }),
+      body: JSON.stringify({ type: "weight", weightKg }),
     });
     const entry: WeightEntry = {
       userId: "", sortKey: `WEIGHT#${new Date().toISOString()}`,
-      type: "weight", date: new Date().toISOString().slice(0, 10), weightKg: Number(newWeight),
+      type: "weight", date: new Date().toISOString().slice(0, 10), weightKg,
     };
     setWeights((p) => [...p, entry]);
     setNewWeight("");
+    setStoneInput("");
+    setLbsInput("");
     setSaving(false);
   }
 
+  const canLog = unit === "kg" ? !!newWeight : !!stoneInput;
   const latest = weights[weights.length - 1];
   const previous = weights[weights.length - 2];
   const diff = latest && previous ? latest.weightKg - previous.weightKg : null;
-  const chartData = weights.map((w) => ({ date: format(parseISO(w.date), "d MMM"), weight: w.weightKg }));
+
+  const chartData = weights.map((w) => ({
+    date: format(parseISO(w.date), "d MMM"),
+    weight: unit === "kg" ? w.weightKg : parseFloat((w.weightKg / 6.35029).toFixed(2)),
+  }));
+
+  const chartUnit = unit === "kg" ? "kg" : "st";
+
+  function displayWeight(kg: number) {
+    return unit === "kg" ? formatWeight(kg) : formatWeightSt(kg);
+  }
+
+  function displayDiff(diffKg: number) {
+    if (unit === "kg") return `${diffKg > 0 ? "+" : ""}${diffKg.toFixed(1)} kg`;
+    const diffLbs = diffKg * 2.20462;
+    return `${diffLbs > 0 ? "+" : ""}${diffLbs.toFixed(1)} lb`;
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader><CardTitle>Log today&apos;s weight</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Log today&apos;s weight</CardTitle>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setUnit("kg")}
+                className={cn("px-2.5 py-1 rounded-lg border text-xs font-medium transition-all",
+                  unit === "kg" ? "bg-primary border-primary text-white" : "border-border text-muted-foreground")}
+              >kg</button>
+              <button
+                onClick={() => setUnit("st")}
+                className={cn("px-2.5 py-1 rounded-lg border text-xs font-medium transition-all",
+                  unit === "st" ? "bg-primary border-primary text-white" : "border-border text-muted-foreground")}
+              >st·lbs</button>
+            </div>
+          </div>
+        </CardHeader>
         <div className="flex gap-3">
-          <Input type="number" inputMode="decimal" placeholder="e.g. 74.5" value={newWeight}
-            onChange={(e) => setNewWeight(e.target.value)} hint="kg" className="flex-1" />
-          <Button onClick={handleLog} loading={saving} disabled={!newWeight} size="md" className="shrink-0">Log</Button>
+          {unit === "kg" ? (
+            <Input type="number" inputMode="decimal" placeholder="e.g. 74.5" value={newWeight}
+              onChange={(e) => setNewWeight(e.target.value)} hint="kg" className="flex-1" />
+          ) : (
+            <div className="flex gap-2 flex-1">
+              <Input type="number" inputMode="numeric" placeholder="11" value={stoneInput}
+                onChange={(e) => setStoneInput(e.target.value)} hint="st" className="flex-1" />
+              <Input type="number" inputMode="numeric" placeholder="5" value={lbsInput}
+                onChange={(e) => setLbsInput(e.target.value)} hint="lb" className="flex-1" />
+            </div>
+          )}
+          <Button onClick={handleLog} loading={saving} disabled={!canLog} size="md" className="shrink-0">Log</Button>
         </div>
       </Card>
 
@@ -73,7 +124,7 @@ function WeightTab() {
         <div className="flex gap-3">
           <Card className="flex-1 text-center">
             <div className="flex items-center justify-center gap-1 mb-1"><Scale size={14} className="text-primary" /><span className="text-xs text-muted-foreground">Current</span></div>
-            <p className="text-2xl font-bold">{formatWeight(latest.weightKg)}</p>
+            <p className="text-2xl font-bold">{displayWeight(latest.weightKg)}</p>
           </Card>
           {diff !== null && (
             <Card className="flex-1 text-center">
@@ -82,7 +133,7 @@ function WeightTab() {
                 <span className="text-xs text-muted-foreground">Change</span>
               </div>
               <p className={cn("text-2xl font-bold", diff < 0 ? "text-green-500" : diff > 0 ? "text-destructive" : "")}>
-                {diff > 0 ? "+" : ""}{diff.toFixed(1)} kg
+                {displayDiff(diff)}
               </p>
             </Card>
           )}
@@ -96,8 +147,9 @@ function WeightTab() {
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-              <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={35} />
-              <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }} />
+              <YAxis domain={["dataMin - 1", "dataMax + 1"]} unit={chartUnit} tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }}
+                formatter={(v) => [`${v} ${chartUnit}`, "Weight"]} />
               <Line type="monotone" dataKey="weight" stroke="#f97316" strokeWidth={2} dot={{ fill: "#f97316", r: 4 }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>

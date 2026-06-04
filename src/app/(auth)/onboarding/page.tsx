@@ -298,7 +298,7 @@ function StepExtraContext({ data, set }: { data: FormData; set: (k: keyof FormDa
   return (
     <div className="flex flex-col gap-5">
       <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
-        <p className="text-sm font-semibold text-orange-800 mb-1">This is your chance to tell Claude anything</p>
+        <p className="text-sm font-semibold text-orange-800 mb-1">This is your chance to tell NewbieAI anything</p>
         <p className="text-xs text-orange-700">
           Previous training plans, injuries, foods you already have, diets you&apos;ve tried, exact meals you love —
           the more detail you give, the more personalised your plan will be.

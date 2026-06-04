@@ -17,6 +17,22 @@ export function formatWeight(kg: number): string {
   return `${kg.toFixed(1)} kg`;
 }
 
+export function kgToStoneLbs(kg: number): { stone: number; lbs: number } {
+  const totalLbs = kg / 0.453592;
+  const stone = Math.floor(totalLbs / 14);
+  const lbs = Math.round((totalLbs % 14) * 10) / 10;
+  return { stone, lbs };
+}
+
+export function stoneLbsToKg(stone: number, lbs: number): number {
+  return Math.round((stone * 14 + lbs) * 0.453592 * 10) / 10;
+}
+
+export function formatWeightSt(kg: number): string {
+  const { stone, lbs } = kgToStoneLbs(kg);
+  return `${stone}st ${lbs}lb`;
+}
+
 export function formatCurrency(gbp: number): string {
   return new Intl.NumberFormat("en-GB", {
     style: "currency",

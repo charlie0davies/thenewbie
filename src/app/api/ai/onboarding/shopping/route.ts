@@ -49,16 +49,17 @@ export async function POST(req: NextRequest) {
     const dislikes = dislikedFoods || "none";
     const hasExistingPlan = extraContext && extraContext.length > 200;
     const extraNote = hasExistingPlan
-      ? `\nThe user has provided their existing meal plan below — base the shopping list on those specific meals and ingredients:\n${extraContext}`
+      ? `\nThe user's existing plan is below — it contains both workouts AND meals. Extract ONLY the meal/ingredient information and build the shopping list from those exact ingredients:\n${extraContext}`
       : "";
+    const itemCountRange = hasExistingPlan ? "20-35" : "10-18";
 
     const shoppingPrompt = `You are a UK nutritionist. Create a one-week shopping list as JSON only — no markdown, no explanation.
 
 ⚠️ ABSOLUTE RULE: NEVER include "${dislikes}" or any ingredient the user dislikes in the shopping list.
 Dietary restrictions: ${dietaryRestrictions?.join(", ") || "none"}.${extraNote}
-${!hasExistingPlan ? `The weekly meal plan has these daily meals: breakfast, lunch, dinner${goal === "build_muscle" ? ", protein shake" : ""}. Cooking skill: ${cookingSkill}.` : ""}
+${!hasExistingPlan ? `The weekly meal plan has these daily meals: breakfast, lunch, dinner${goal === "build_muscle" ? ", protein shake" : ""}. Cooking skill: ${cookingSkill}.` : "Every ingredient mentioned across all days of the existing meal plan must appear in the shopping list. Do not omit anything."}
 
-Return ONLY this JSON (10-18 items covering a full week):
+Return ONLY this JSON (${itemCountRange} items covering a full week):
 {
   "weekStartDate": "${new Date().toISOString().slice(0, 10)}",
   "items": [
@@ -82,7 +83,7 @@ Rules: each URL must use the actual item name encoded for that retailer's search
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 4000,
+      max_tokens: hasExistingPlan ? 6000 : 4000,
       messages: [{ role: "user", content: shoppingPrompt }],
     });
     if (msg.stop_reason === "max_tokens") throw new Error("Shopping list response was cut short");

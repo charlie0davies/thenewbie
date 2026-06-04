@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, Dumbbell, UtensilsCrossed, TrendingUp, ShoppingCart, MessageCircle, Settings, LogOut } from "lucide-react";
@@ -29,9 +30,7 @@ export default function Sidebar() {
     <aside className="hidden lg:flex flex-col w-60 fixed top-0 left-0 bottom-0 bg-card border-r border-border z-40">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-border">
-        <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shrink-0">
-          <span className="text-base font-black text-white">N</span>
-        </div>
+        <Image src="/NewbieLogo.png" alt="The Newbie" width={36} height={36} className="shrink-0 rounded-xl object-contain" />
         <div>
           <p className="font-bold text-sm leading-none">The Newbie</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">Fitness & Diet</p>

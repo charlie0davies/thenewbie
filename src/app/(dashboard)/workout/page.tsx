@@ -6,8 +6,16 @@ import { Card } from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { Dumbbell, Check, ChevronDown, ChevronUp, ExternalLink, Plus, Trash2, X } from "lucide-react";
+import { Dumbbell, Check, ChevronDown, ChevronUp, ExternalLink, Plus, Trash2, X, Clock, Flame, Timer } from "lucide-react";
 import type { WorkoutPlan, DayRoutine, PlanExercise } from "@/lib/db/plans";
+
+function estimateSessionMins(exercises: PlanExercise[]): number {
+  const secs = exercises.reduce((t, ex) => {
+    const rest = ex.restSeconds ?? 90;
+    return t + ex.sets * 45 + (ex.sets - 1) * rest + 30;
+  }, 0);
+  return Math.round(secs / 60);
+}
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
@@ -59,7 +67,7 @@ function ExerciseCard({ exercise, onDelete }: { exercise: PlanExercise; onDelete
             <div>
               <p className="font-semibold text-sm">{exercise.name}</p>
               <p className="text-xs text-muted-foreground">
-                {exercise.sets} × {exercise.reps} · {exercise.muscleGroup}
+                {exercise.sets} × {exercise.reps} · {exercise.muscleGroup} · {exercise.restSeconds ?? 90}s rest
               </p>
             </div>
           </div>
@@ -82,8 +90,12 @@ function ExerciseCard({ exercise, onDelete }: { exercise: PlanExercise; onDelete
       {open && (
         <div className="px-4 pb-4 border-t border-border">
           <div className="flex items-start justify-between gap-2 mt-3 mb-3">
-            <div className="flex-1">
+            <div className="flex-1 flex flex-col gap-1">
               {exercise.notes && <p className="text-xs text-muted-foreground italic">{exercise.notes}</p>}
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Timer size={11} />
+                <span>Rest {exercise.restSeconds ?? 90}s between sets</span>
+              </div>
             </div>
             <a href={ytUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs font-medium text-red-500 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100 shrink-0">
@@ -290,9 +302,19 @@ export default function WorkoutPage() {
           </>
         ) : (
           <>
-            <p className="text-xs text-muted-foreground px-1">
-              {dayRoutine?.exercises.length ?? 0} exercises · tap to log sets
-            </p>
+            <div className="flex items-center gap-3 px-1 flex-wrap">
+              <p className="text-xs text-muted-foreground">
+                {dayRoutine?.exercises.length ?? 0} exercises
+              </p>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock size={11} />
+                <span>~{estimateSessionMins(dayRoutine?.exercises ?? [])} min</span>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-orange-500">
+                <Flame size={11} />
+                <span>~{Math.round(estimateSessionMins(dayRoutine?.exercises ?? []) * 5)} kcal</span>
+              </div>
+            </div>
             {dayRoutine?.exercises.map((ex) => (
               <ExerciseCard key={ex.id} exercise={ex} onDelete={() => handleDeleteExercise(ex.id)} />
             ))}

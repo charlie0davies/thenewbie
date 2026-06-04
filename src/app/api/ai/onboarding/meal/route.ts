@@ -57,15 +57,17 @@ function buildConversionPrompt(params: {
 2. Dietary restrictions to honour: ${restrictions || "none"}.
 3. Use their ACTUAL meals from the plan below. Do not invent new meals.
 4. Use plain simple meal names: "Chicken and Rice", "Oats and Yogurt", "Mince and Veg" etc.
+5. The user's context below contains BOTH workout exercises AND nutrition/meals. Ignore the exercise lists — extract ONLY the meal sections (Breakfast, Lunch, Dinner, Snacks) for each day.
+6. Macros appear in the format "430 kcal | 42P | 38C | 8F" — this means: calories=430, proteinG=42, carbsG=38, fatG=8.
 
-THE USER'S EXISTING MEAL PLAN:
+THE USER'S EXISTING PLAN (contains workouts AND meals — extract ONLY the Breakfast/Lunch/Dinner/Snacks sections):
 ${extraContext}
 
-Convert this into the JSON below. Extract:
-- workoutDayVariants: 3 arrays — use meals from Mon, Tue, Thu as 3 separate workout day variants
-- restDayVariants: 2 arrays — use meals from Wed and Sat/Sun as 2 rest day variants
+Identify which days have gym/exercise sessions (workout days) and which days are rest/recovery only (rest days). Then convert the MEAL sections into the JSON below:
+- workoutDayVariants: 3 arrays — pick meals from 3 different workout days
+- restDayVariants: 2 arrays — pick meals from 2 different rest/recovery days
 - Include snacks where listed (time: "snack")
-- Use the macros already stated in the plan for each meal
+- Use the macros already stated in the plan for each meal — do NOT recalculate them
 
 {
   "dailyCalories": ${targetCalories},
@@ -82,13 +84,13 @@ Convert this into the JSON below. Extract:
   "workoutDayMeals": [],
   "restDayMeals": [],
   "workoutDayVariants": [
-    [<Monday: breakfast obj, lunch obj, dinner obj, snack obj>],
-    [<Tuesday: breakfast obj, lunch obj, dinner obj, snack obj>],
-    [<Thursday: breakfast obj, lunch obj, dinner obj, snack obj>]
+    [<workout day 1: breakfast obj, lunch obj, dinner obj, snack obj>],
+    [<workout day 2: breakfast obj, lunch obj, dinner obj, snack obj>],
+    [<workout day 3: breakfast obj, lunch obj, dinner obj, snack obj>]
   ],
   "restDayVariants": [
-    [<Wednesday: breakfast obj, lunch obj, dinner obj, snack obj>],
-    [<Saturday: breakfast obj, lunch obj, dinner obj, snack obj>]
+    [<rest day 1: breakfast obj, lunch obj, dinner obj, snack obj>],
+    [<rest day 2: breakfast obj, lunch obj, dinner obj, snack obj>]
   ]
 }
 

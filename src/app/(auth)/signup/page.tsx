@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signUp } from "aws-amplify/auth";
+import Image from "next/image";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 
@@ -39,9 +40,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         <div className="bg-card rounded-3xl border border-border p-8 shadow-sm">
           <div className="mb-8 text-center">
-            <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-2xl font-black text-white">N</span>
-            </div>
+            <Image src="/NewbieLogo.png" alt="The Newbie" width={56} height={56} className="mx-auto mb-4 rounded-2xl object-contain" />
             <h1 className="text-2xl font-bold">Create account</h1>
             <p className="text-muted-foreground text-sm mt-1">Start your fitness journey today.</p>
           </div>
