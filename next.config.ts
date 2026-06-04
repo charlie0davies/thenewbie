@@ -13,8 +13,9 @@ const nextConfig: NextConfig = {
       allowedOrigins: [
         "localhost:3000",
         "main.d2bkfvj6gzjt4r.amplifyapp.com",
-        "thenewbie.io",
-        "www.thenewbie.io",
+        "thenewbie.org",
+        "www.thenewbie.org",
+        "capacitor://localhost",
       ],
     },
   },
