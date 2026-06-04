@@ -20,6 +20,9 @@ export interface UserProfile {
   targetWeightKg?: number;
   createdAt: string;
   onboardingComplete?: boolean;
+  plan?: "free" | "premium";
+  coachMessagesUsed?: number;
+  coachMessagesMonth?: string; // "YYYY-MM"
 }
 
 export interface Macros {

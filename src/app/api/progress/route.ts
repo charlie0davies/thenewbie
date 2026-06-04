@@ -6,6 +6,8 @@ import {
   logWorkout,
   getWeightHistory,
   getWorkoutHistory,
+  logMeasurement,
+  getMeasurementHistory,
 } from "@/lib/db/progress";
 
 async function getUserId(req: NextRequest) {
@@ -29,6 +31,9 @@ export async function GET(req: NextRequest) {
   if (type === "weight") {
     const data = await getWeightHistory(userId);
     return NextResponse.json(data);
+  } else if (type === "measurement") {
+    const data = await getMeasurementHistory(userId);
+    return NextResponse.json(data);
   } else {
     const exerciseId = searchParams.get("exerciseId") || undefined;
     const data = await getWorkoutHistory(userId, exerciseId);
@@ -44,13 +49,10 @@ export async function POST(req: NextRequest) {
   if (body.type === "weight") {
     await logWeight(userId, body.weightKg, body.date);
   } else if (body.type === "workout") {
-    await logWorkout(
-      userId,
-      body.exerciseId,
-      body.exerciseName,
-      body.sets,
-      body.date
-    );
+    await logWorkout(userId, body.exerciseId, body.exerciseName, body.sets, body.date);
+  } else if (body.type === "measurement") {
+    const { type: _, date, ...measurements } = body;
+    await logMeasurement(userId, measurements, date);
   }
 
   return NextResponse.json({ ok: true });

@@ -4,6 +4,19 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { db, Tables } from "@/lib/aws/dynamo";
 
+export interface MeasurementEntry {
+  userId: string;
+  sortKey: string; // MEASUREMENT#<ISO timestamp>
+  type: "measurement";
+  date: string;
+  waistCm?: number;
+  neckCm?: number;
+  chestCm?: number;
+  hipsCm?: number;
+  armCm?: number;
+  thighCm?: number;
+}
+
 export interface WeightEntry {
   userId: string;
   sortKey: string; // WEIGHT#<ISO timestamp>
@@ -22,7 +35,7 @@ export interface WorkoutLogEntry {
   sets: { reps: number; weightKg: number }[];
 }
 
-export type ProgressEntry = WeightEntry | WorkoutLogEntry;
+export type ProgressEntry = WeightEntry | WorkoutLogEntry | MeasurementEntry;
 
 export async function logWeight(
   userId: string,
@@ -80,6 +93,39 @@ export async function getWeightHistory(
     })
   );
   return Items as WeightEntry[];
+}
+
+export async function logMeasurement(
+  userId: string,
+  measurements: Omit<MeasurementEntry, "userId" | "sortKey" | "type" | "date">,
+  date?: string
+): Promise<void> {
+  const now = new Date();
+  const isoDate = date || now.toISOString().slice(0, 10);
+  const entry: MeasurementEntry = {
+    userId,
+    sortKey: `MEASUREMENT#${now.toISOString()}`,
+    type: "measurement",
+    date: isoDate,
+    ...measurements,
+  };
+  await db.send(new PutCommand({ TableName: Tables.progress, Item: entry }));
+}
+
+export async function getMeasurementHistory(
+  userId: string,
+  limit = 30
+): Promise<MeasurementEntry[]> {
+  const { Items = [] } = await db.send(
+    new QueryCommand({
+      TableName: Tables.progress,
+      KeyConditionExpression: "userId = :uid AND begins_with(sortKey, :prefix)",
+      ExpressionAttributeValues: { ":uid": userId, ":prefix": "MEASUREMENT#" },
+      ScanIndexForward: false,
+      Limit: limit,
+    })
+  );
+  return Items as MeasurementEntry[];
 }
 
 export async function getWorkoutHistory(

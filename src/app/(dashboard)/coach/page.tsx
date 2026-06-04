@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { cn } from "@/lib/utils";
-import { Send, Bot, User } from "lucide-react";
+import { Send, Bot, User, Lock } from "lucide-react";
+
+const FREE_LIMIT = 5;
 
 // ─── Simple markdown renderer ─────────────────────────────────────────────────
 
@@ -74,8 +76,20 @@ export default function CoachPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [messagesUsed, setMessagesUsed] = useState(0);
+  const [isPremium, setIsPremium] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    fetch("/api/user").then((r) => r.json()).then((u) => {
+      if (!u) return;
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const used = u.coachMessagesMonth === currentMonth ? (u.coachMessagesUsed ?? 0) : 0;
+      setMessagesUsed(used);
+      setIsPremium(u.plan === "premium");
+    });
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -103,6 +117,12 @@ export default function CoachPage() {
         throw new Error("Failed to get response");
       }
 
+      if (res.status === 402) {
+        setMessagesUsed(FREE_LIMIT);
+        setMessages((prev) => prev.slice(0, -1));
+        return;
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let accumulated = "";
@@ -128,6 +148,7 @@ export default function CoachPage() {
       });
     } finally {
       setStreaming(false);
+      setMessagesUsed((prev) => Math.min(prev + 1, FREE_LIMIT));
     }
   }
 
@@ -209,30 +230,52 @@ export default function CoachPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
+      {/* Input / Paywall */}
       <div className="px-4 pb-4 lg:pb-6 pt-2 border-t border-border bg-background">
-        <div className="flex gap-2 items-end max-w-2xl mx-auto">
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask your coach..."
-            className="flex-1 resize-none rounded-2xl border border-border bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary max-h-32 overflow-y-auto"
-            style={{ minHeight: 48 }}
-          />
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || streaming}
-            className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center shrink-0 disabled:opacity-50 transition-all active:scale-95"
-          >
-            <Send size={18} />
-          </button>
-        </div>
-        <p className="text-center text-[10px] text-muted-foreground mt-2">
-          AI-powered · Not a substitute for professional medical advice
-        </p>
+        {!isPremium && messagesUsed >= FREE_LIMIT ? (
+          <div className="max-w-2xl mx-auto flex flex-col items-center gap-3 py-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+              <Lock size={20} className="text-primary" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">You&apos;ve used all {FREE_LIMIT} free messages</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Resets on the 1st of next month</p>
+            </div>
+            <button className="px-6 py-2.5 bg-primary text-white text-sm font-semibold rounded-2xl active:scale-95 transition-all">
+              Upgrade to Premium — 50 messages/month
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-2 items-end max-w-2xl mx-auto">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask your coach..."
+                className="flex-1 resize-none rounded-2xl border border-border bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary max-h-32 overflow-y-auto"
+                style={{ minHeight: 48 }}
+              />
+              <button
+                onClick={() => sendMessage(input)}
+                disabled={!input.trim() || streaming}
+                className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center shrink-0 disabled:opacity-50 transition-all active:scale-95"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+            {!isPremium && (
+              <p className="text-center text-[10px] text-muted-foreground mt-2">
+                {messagesUsed} / {FREE_LIMIT} free messages used this month
+              </p>
+            )}
+            <p className="text-center text-[10px] text-muted-foreground mt-1">
+              AI-powered · Not a substitute for professional medical advice
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

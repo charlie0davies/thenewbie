@@ -11,16 +11,17 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from "recharts";
-import type { WeightEntry } from "@/lib/db/progress";
+import type { WeightEntry, MeasurementEntry } from "@/lib/db/progress";
 import { format, parseISO } from "date-fns";
 
-type Tab = "weight" | "nutrition" | "strength" | "projections";
+type Tab = "weight" | "nutrition" | "strength" | "body" | "projections";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "weight", label: "Weight" },
   { id: "nutrition", label: "Nutrition" },
   { id: "strength", label: "Strength" },
-  { id: "projections", label: "Projections" },
+  { id: "body", label: "Body" },
+  { id: "projections", label: "Goals" },
 ];
 
 // ─── Weight tab ───────────────────────────────────────────────────────────────
@@ -301,6 +302,250 @@ function StrengthTab() {
   );
 }
 
+// ─── Measurements tab ─────────────────────────────────────────────────────────
+
+type MKey = "waistCm" | "neckCm" | "chestCm" | "hipsCm" | "armCm" | "thighCm";
+
+const M_FIELDS: { key: MKey; label: string }[] = [
+  { key: "waistCm", label: "Waist" },
+  { key: "neckCm", label: "Neck" },
+  { key: "chestCm", label: "Chest" },
+  { key: "hipsCm", label: "Hips" },
+  { key: "armCm", label: "Arm" },
+  { key: "thighCm", label: "Thigh" },
+];
+
+function calcBodyFat(m: MeasurementEntry, heightCm: number, gender: string): number | null {
+  const { waistCm, neckCm, hipsCm } = m;
+  if (!waistCm || !neckCm || !heightCm || waistCm <= neckCm) return null;
+  let val: number;
+  if (gender === "female") {
+    if (!hipsCm || waistCm + hipsCm <= neckCm) return null;
+    val = 163.205 * Math.log10(waistCm + hipsCm - neckCm) - 97.684 * Math.log10(heightCm) - 78.387;
+    return Math.round(Math.max(10, Math.min(60, val)) * 10) / 10;
+  }
+  val = 86.010 * Math.log10(waistCm - neckCm) - 70.041 * Math.log10(heightCm) + 36.76;
+  return Math.round(Math.max(3, Math.min(60, val)) * 10) / 10;
+}
+
+function MeasurementsTab() {
+  const [history, setHistory] = useState<MeasurementEntry[]>([]);
+  const [user, setUser] = useState<{ heightCm: number; gender: string; weightKg: number } | null>(null);
+  const [unit, setUnit] = useState<"cm" | "in">("cm");
+  const [form, setForm] = useState<Record<MKey, string>>({
+    waistCm: "", neckCm: "", chestCm: "", hipsCm: "", armCm: "", thighCm: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<MKey>("waistCm");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/user").then((r) => r.json()),
+      fetch("/api/progress?type=measurement").then((r) => r.json()),
+    ]).then(([u, m]) => {
+      setUser(u);
+      setHistory(Array.isArray(m) ? m.reverse() : []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  function toStoreCm(val: string): number | undefined {
+    const n = parseFloat(val);
+    if (!n) return undefined;
+    return unit === "in" ? Math.round(n * 2.54 * 10) / 10 : n;
+  }
+
+  function toDisplay(cm: number): string {
+    return unit === "in" ? (cm / 2.54).toFixed(1) : cm.toFixed(1);
+  }
+
+  const dispUnit = unit === "cm" ? "cm" : '"';
+
+  async function handleLog() {
+    const measurements: Partial<Record<MKey, number>> = {};
+    for (const { key } of M_FIELDS) {
+      const v = toStoreCm(form[key]);
+      if (v) measurements[key] = v;
+    }
+    if (!Object.keys(measurements).length) return;
+    setSaving(true);
+    await fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "measurement", ...measurements }),
+    });
+    const entry: MeasurementEntry = {
+      userId: "", sortKey: `MEASUREMENT#${new Date().toISOString()}`,
+      type: "measurement", date: new Date().toISOString().slice(0, 10),
+      ...measurements,
+    };
+    setHistory((prev) => [...prev, entry]);
+    setForm({ waistCm: "", neckCm: "", chestCm: "", hipsCm: "", armCm: "", thighCm: "" });
+    setSaving(false);
+  }
+
+  const hasAny = Object.values(form).some((v) => !!v);
+  const latest = history[history.length - 1];
+  const prev = history[history.length - 2];
+
+  const bodyFat = latest && user ? calcBodyFat(latest, user.heightCm, user.gender) : null;
+  const prevBodyFat = prev && user ? calcBodyFat(prev, user.heightCm, user.gender) : null;
+  const fatMassKg = bodyFat !== null && user ? Math.round(user.weightKg * bodyFat / 100 * 10) / 10 : null;
+  const leanMassKg = fatMassKg !== null && user ? Math.round((user.weightKg - fatMassKg) * 10) / 10 : null;
+
+  const loggedKeys = M_FIELDS.filter((f) => history.some((h) => h[f.key] !== undefined));
+  const chartData = history
+    .map((h) => {
+      const raw = h[selected];
+      return {
+        date: format(parseISO(h.date), "d MMM"),
+        value: raw !== undefined ? (unit === "in" ? Math.round((raw / 2.54) * 10) / 10 : raw) : null,
+      };
+    })
+    .filter((d) => d.value !== null);
+
+  if (loading) return <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Log form */}
+      <Card className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">Log measurements</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Fill in whichever you have</p>
+          </div>
+          <div className="flex gap-1 p-1 bg-muted rounded-lg">
+            {(["cm", "in"] as const).map((u) => (
+              <button key={u} onClick={() => setUnit(u)}
+                className={cn("px-3 py-1 rounded text-xs font-semibold transition-all",
+                  unit === u ? "bg-white shadow-sm text-primary" : "text-muted-foreground")}
+              >{u}</button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {M_FIELDS.map(({ key, label }) => (
+            <div key={key} className="flex flex-col gap-1">
+              <p className="text-xs text-muted-foreground">{label} ({dispUnit})</p>
+              <Input type="number" inputMode="decimal" placeholder="—"
+                value={form[key]}
+                onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))} />
+            </div>
+          ))}
+        </div>
+        <Button onClick={handleLog} loading={saving} disabled={!hasAny} size="md" className="w-full">
+          Log measurements
+        </Button>
+      </Card>
+
+      {/* Body composition */}
+      {bodyFat !== null && fatMassKg !== null && leanMassKg !== null && (
+        <Card className="flex flex-col gap-3">
+          <CardHeader><CardTitle>Body composition</CardTitle></CardHeader>
+          <div className="flex gap-2">
+            <div className="flex-1 text-center bg-orange-50 rounded-xl p-3">
+              <p className="text-[10px] text-muted-foreground mb-1">Body fat</p>
+              <p className="text-xl font-bold text-primary">{bodyFat}%</p>
+              {prevBodyFat !== null && (
+                <p className={cn("text-[10px] mt-0.5", bodyFat < prevBodyFat ? "text-green-600" : "text-destructive")}>
+                  {bodyFat < prevBodyFat ? "▼" : "▲"} {Math.abs(bodyFat - prevBodyFat).toFixed(1)}%
+                </p>
+              )}
+            </div>
+            <div className="flex-1 text-center bg-red-50 rounded-xl p-3">
+              <p className="text-[10px] text-muted-foreground mb-1">Fat mass</p>
+              <p className="text-xl font-bold">{fatMassKg} kg</p>
+            </div>
+            <div className="flex-1 text-center bg-green-50 rounded-xl p-3">
+              <p className="text-[10px] text-muted-foreground mb-1">Lean mass</p>
+              <p className="text-xl font-bold text-green-600">{leanMassKg} kg</p>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+              <span>Fat {bodyFat}%</span>
+              <span>Muscle {(100 - bodyFat).toFixed(1)}%</span>
+            </div>
+            <div className="h-3 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-orange-400 to-orange-300 rounded-full transition-all"
+                style={{ width: `${Math.min(bodyFat, 100)}%` }} />
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Estimated via US Navy method. For reference only.</p>
+        </Card>
+      )}
+
+      {/* Latest snapshot */}
+      {latest && (
+        <Card className="flex flex-col gap-3">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Latest snapshot</CardTitle>
+              <span className="text-[10px] text-muted-foreground">{format(parseISO(latest.date), "d MMM yyyy")}</span>
+            </div>
+          </CardHeader>
+          <div className="grid grid-cols-3 gap-2">
+            {M_FIELDS.map(({ key, label }) => {
+              const val = latest[key];
+              if (val === undefined) return null;
+              const prevVal = prev?.[key];
+              const diff = prevVal !== undefined ? val - prevVal : null;
+              return (
+                <div key={key} className="text-center bg-muted rounded-xl p-2">
+                  <p className="text-[10px] text-muted-foreground">{label}</p>
+                  <p className="font-bold text-sm">{toDisplay(val)}{dispUnit}</p>
+                  {diff !== null && (
+                    <p className={cn("text-[10px]", diff < 0 ? "text-green-600" : diff > 0 ? "text-destructive" : "text-muted-foreground")}>
+                      {diff > 0 ? "+" : ""}{unit === "in" ? (diff / 2.54).toFixed(1) : diff.toFixed(1)}{dispUnit}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Chart */}
+      {loggedKeys.length > 0 && history.length > 1 && (
+        <Card className="flex flex-col gap-3">
+          <CardHeader><CardTitle>Over time</CardTitle></CardHeader>
+          <div className="flex flex-wrap gap-2">
+            {loggedKeys.map(({ key, label }) => (
+              <button key={key} onClick={() => setSelected(key)}
+                className={cn("px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
+                  selected === key ? "bg-primary border-primary text-white" : "bg-white border-border text-muted-foreground"
+                )}
+              >{label}</button>
+            ))}
+          </div>
+          {chartData.length > 1 && (
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={40} unit={dispUnit} />
+                <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }}
+                  formatter={(v) => [`${v}${dispUnit}`, M_FIELDS.find((f) => f.key === selected)?.label]} />
+                <Line type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2}
+                  dot={{ fill: "#f97316", r: 4 }} activeDot={{ r: 6 }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+      )}
+
+      {!latest && (
+        <Card className="text-center py-8">
+          <p className="text-muted-foreground text-sm">Log your first measurements to start tracking body composition.</p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ─── Projections tab ──────────────────────────────────────────────────────────
 
 function ProjectionsTab() {
@@ -457,13 +702,13 @@ export default function ProgressPage() {
       <Header title="Progress" />
 
       {/* Tabs */}
-      <div className="grid grid-cols-4 gap-1 px-4 pb-4">
+      <div className="grid grid-cols-5 gap-1 px-4 pb-4">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              "py-2 rounded-xl text-xs font-medium border transition-all",
+              "py-2 rounded-xl text-[10px] font-medium border transition-all",
               tab === t.id ? "bg-primary border-primary text-white" : "bg-white border-border text-muted-foreground"
             )}
           >
@@ -476,6 +721,7 @@ export default function ProgressPage() {
         {tab === "weight" && <WeightTab />}
         {tab === "nutrition" && <NutritionTab />}
         {tab === "strength" && <StrengthTab />}
+        {tab === "body" && <MeasurementsTab />}
         {tab === "projections" && <ProjectionsTab />}
       </div>
     </div>

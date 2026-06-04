@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { fetchAuthSession } from "aws-amplify/auth/server";
 import { runWithAmplifyServerContext } from "@/lib/auth/amplify-server";
-import { getUser } from "@/lib/db/users";
+import { getUser, updateUser } from "@/lib/db/users";
 import { getActivePlan } from "@/lib/db/plans";
+
+const FREE_LIMIT = 5;
 
 export const maxDuration = 60;
 
@@ -28,11 +30,25 @@ export async function POST(req: NextRequest) {
 
   const { messages } = await req.json();
 
+  const currentMonth = new Date().toISOString().slice(0, 7);
   const [userProfile, workoutPlan, mealPlan] = await Promise.all([
     getUser(userId),
     getActivePlan(userId, "workout"),
     getActivePlan(userId, "meal"),
   ]);
+
+  if (userProfile) {
+    const plan = userProfile.plan ?? "free";
+    const usedCount = userProfile.coachMessagesMonth === currentMonth
+      ? (userProfile.coachMessagesUsed ?? 0) : 0;
+    if (plan === "free" && usedCount >= FREE_LIMIT) {
+      return NextResponse.json({ error: "limit_reached", used: usedCount, limit: FREE_LIMIT }, { status: 402 });
+    }
+    await updateUser(userId, {
+      coachMessagesUsed: usedCount + 1,
+      coachMessagesMonth: currentMonth,
+    });
+  }
 
   const profileSummary = userProfile
     ? `Name: ${userProfile.name}, Age: ${userProfile.age}, Height: ${userProfile.heightCm}cm, Weight: ${userProfile.weightKg}kg, Goal: ${userProfile.goal}, Experience: ${userProfile.experience}`
