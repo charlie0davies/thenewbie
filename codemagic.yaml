@@ -1,0 +1,32 @@
+workflows:
+  ios-capacitor:
+    name: TheNewbie iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: codemagic-asc-key
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: org.thenewbie.app
+      node: 20.17.0
+      xcode: latest
+    scripts:
+      - name: Install dependencies
+        script: npm ci
+      - name: Capacitor sync
+        script: npx cap sync ios
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Build iOS
+        script: |
+          xcode-project build-ipa \
+            --workspace ios/App/App.xcworkspace \
+            --scheme App
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
