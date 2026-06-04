@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { cn, formatCurrency } from "@/lib/utils";
-import { CheckCircle2, Circle, ShoppingCart, ExternalLink } from "lucide-react";
+import { CheckCircle2, Circle, ShoppingCart, ExternalLink, Calendar } from "lucide-react";
 import type { ShoppingList, ShoppingListItem } from "@/lib/db/shopping";
 
 const STORE_KEYS: { key: keyof ShoppingListItem; label: string; color: string }[] = [
@@ -144,6 +144,14 @@ export default function ShoppingPage() {
           </Card>
         ) : (
           <>
+            {/* Sunday reminder */}
+            <div className="flex items-center gap-2.5 px-3 py-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+              <Calendar size={15} className="text-amber-500 shrink-0" />
+              <p className="text-xs text-amber-800">
+                <span className="font-semibold">Do your weekly shop on Sunday.</span> Your list resets every Monday.
+              </p>
+            </div>
+
             {/* Summary */}
             <div className="flex gap-3">
               <Card className="flex-1 text-center">
@@ -171,6 +179,10 @@ export default function ShoppingPage() {
                 style={{ width: `${(boughtCount / items.length) * 100}%` }}
               />
             </div>
+
+            <p className="text-xs text-center text-muted-foreground">
+              Tap any item to see supermarket pricing
+            </p>
 
             {/* Category filter */}
             {categories.length > 1 && (

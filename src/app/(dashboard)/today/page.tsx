@@ -15,13 +15,151 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  ChevronRight,
 } from "lucide-react";
 import type { DailyRecord, DailyPlanItem } from "@/lib/db/daily";
 import { formatIngredient } from "@/lib/formatIngredient";
+import type { UserProfile } from "@/types";
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 const today = new Date().toISOString().slice(0, 10);
+
+// ─── Quotes ───────────────────────────────────────────────────────────────────
+
+const QUOTES = [
+  "The only bad workout is the one that didn't happen.",
+  "Small steps every day lead to big results.",
+  "Push yourself — no one else is going to do it for you.",
+  "Every expert was once a beginner.",
+  "Your body can do it. It's your mind you need to convince.",
+  "Discipline is choosing what you want most over what you want now.",
+  "The pain you feel today is the strength you'll feel tomorrow.",
+  "Don't stop when it hurts. Stop when you're done.",
+  "Motivation gets you started. Habit keeps you going.",
+  "One day at a time. One rep at a time.",
+  "You don't have to be extreme — just consistent.",
+  "Progress, not perfection.",
+  "The harder you work, the better you feel.",
+  "Show up. Even on the bad days.",
+  "Results happen over time, not overnight.",
+  "Your future self will thank you.",
+  "Eat well, train hard, sleep more.",
+  "Strength comes from overcoming what you thought you couldn't.",
+  "You are one workout away from a good mood.",
+  "Take care of your body — it's the only place you have to live.",
+  "Sweat, sacrifice, succeed.",
+  "Tough times don't last. Tough people do.",
+  "Success is the sum of small efforts repeated daily.",
+  "Believe in yourself and all that you are.",
+  "Train hard, recover harder.",
+  "A little progress each day adds up to big results.",
+  "Earn it.",
+  "Be stronger than your excuses.",
+];
+
+function getDailyQuote(): string {
+  const start = new Date(new Date().getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((Date.now() - start.getTime()) / 86400000);
+  return QUOTES[dayOfYear % QUOTES.length];
+}
+
+function getSessionLabel(exercises: DailyPlanItem[]): { label: string; why: string } {
+  if (!exercises.length) return { label: "Rest day", why: "Recovery is when your muscles actually grow." };
+  const text = exercises.map((e) => e.label.toLowerCase()).join(" ");
+  if (/bench|chest|push\s*up|tricep|overhead|shoulder press|dip/.test(text))
+    return { label: "Push session", why: "Chest, shoulders & triceps today." };
+  if (/row|pull\s*up|lat|deadlift|back|bicep|chin\s*up/.test(text))
+    return { label: "Pull session", why: "Back & biceps — the pulling muscles." };
+  if (/squat|leg press|lunge|quad|glute|hamstring|calf|rdl/.test(text))
+    return { label: "Leg session", why: "Lower body — your biggest muscle group." };
+  if (/cardio|run|jog|cycle|swim|hiit|treadmill/.test(text))
+    return { label: "Cardio session", why: "Heart health & calorie burn." };
+  return { label: `Workout · ${exercises.length} exercise${exercises.length > 1 ? "s" : ""}`, why: "Full body or mixed session." };
+}
+
+// ─── Daily Briefing ───────────────────────────────────────────────────────────
+
+function DailyBriefing({
+  record,
+  userName,
+}: {
+  record: DailyRecord;
+  userName: string;
+}) {
+  const storageKey = `briefing-seen-${today}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return !!localStorage.getItem(storageKey); } catch { return false; }
+  });
+
+  function dismiss() {
+    try { localStorage.setItem(storageKey, "1"); } catch { /* noop */ }
+    setCollapsed(true);
+  }
+
+  const exercises = record.items.filter((i) => i.type === "exercise");
+  const meals = record.items.filter((i) => i.type === "meal");
+  const { label: sessionLabel, why: sessionWhy } = getSessionLabel(exercises);
+  const quote = getDailyQuote();
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Morning" : hour < 18 ? "Hey" : "Evening";
+  const name = userName ? `, ${userName.split(" ")[0]}` : "";
+
+  const goals = [
+    exercises.length > 0 && `Complete ${exercises.length} exercise${exercises.length > 1 ? "s" : ""}`,
+    meals.length > 0 && "Hit your nutrition targets",
+    `Drink ${(record.waterMlTarget / 1000).toFixed(1)}L of water`,
+  ].filter(Boolean) as string[];
+
+  if (collapsed) {
+    return (
+      <button
+        onClick={() => setCollapsed(false)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-orange-50 border border-orange-100 rounded-2xl text-left"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-base">☀️</span>
+          <div>
+            <p className="text-xs font-semibold text-orange-800">{sessionLabel}</p>
+            <p className="text-xs text-orange-600">{sessionWhy}</p>
+          </div>
+        </div>
+        <ChevronRight size={14} className="text-orange-400 shrink-0" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-4 flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="font-bold text-orange-900">{greeting}{name}! 💪</p>
+          <p className="text-sm text-orange-700 mt-0.5">{sessionLabel}</p>
+          <p className="text-xs text-orange-600">{sessionWhy}</p>
+        </div>
+        <button onClick={dismiss} className="text-xs text-orange-400 hover:text-orange-600 shrink-0 mt-0.5">
+          Dismiss
+        </button>
+      </div>
+
+      <div className="bg-white/60 rounded-xl px-3 py-2.5">
+        <p className="text-xs italic text-orange-800">&ldquo;{quote}&rdquo;</p>
+      </div>
+
+      <div>
+        <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide mb-2">Today&apos;s goals</p>
+        <div className="flex flex-col gap-1.5">
+          {goals.map((g) => (
+            <div key={g} className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full border-2 border-orange-300 shrink-0" />
+              <p className="text-xs text-orange-800">{g}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Celebration burst ────────────────────────────────────────────────────────
 
@@ -59,14 +197,107 @@ function CelebrationBurst({ active }: { active: boolean }) {
   );
 }
 
+// ─── Exercise Performance Logger ──────────────────────────────────────────────
+
+function ExercisePerf({
+  item,
+  onUpdateItem,
+}: {
+  item: DailyPlanItem;
+  onUpdateItem: (id: string, updates: Partial<DailyPlanItem>) => void;
+}) {
+  const hasSaved = item.actualSets !== undefined || item.actualReps !== undefined || item.actualWeightKg !== undefined;
+  const [editing, setEditing] = useState(!hasSaved);
+  const [sets, setSets] = useState(String(item.actualSets ?? item.sets ?? ""));
+  const [reps, setReps] = useState(item.actualReps ?? item.reps ?? "");
+  const [weight, setWeight] = useState(String(item.actualWeightKg ?? item.weightKg ?? ""));
+
+  function handleLog() {
+    onUpdateItem(item.id, {
+      actualSets: sets ? Number(sets) : undefined,
+      actualReps: reps || undefined,
+      actualWeightKg: weight ? Number(weight) : undefined,
+    });
+    setEditing(false);
+  }
+
+  const isBodyweight = !item.weightKg;
+
+  return (
+    <div className="flex flex-col gap-2 mt-1">
+      {item.sets && (
+        <div className="bg-muted rounded-lg px-3 py-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Target</p>
+          <p className="text-xs text-foreground font-medium">
+            {item.sets} sets × {item.reps}
+            {item.weightKg ? ` @ ${item.weightKg}kg` : " (bodyweight)"}
+          </p>
+        </div>
+      )}
+
+      <div>
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">What you did</p>
+        {!editing && hasSaved ? (
+          <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+            <p className="text-xs text-green-700 font-medium">
+              ✓ {item.actualSets} sets × {item.actualReps || item.reps}
+              {item.actualWeightKg ? ` @ ${item.actualWeightKg}kg` : ""}
+            </p>
+            <button onClick={() => setEditing(true)} className="text-xs text-muted-foreground hover:text-foreground ml-2">
+              Edit
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2 items-end">
+            <div className="flex flex-col items-center gap-1 flex-1">
+              <input
+                type="number" inputMode="numeric" placeholder={String(item.sets ?? "")}
+                value={sets} onChange={(e) => setSets(e.target.value)}
+                className="w-full h-10 text-center text-sm rounded-lg border border-border bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="text-[10px] text-muted-foreground">sets</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 flex-1">
+              <input
+                type="text" inputMode="numeric" placeholder={item.reps ?? "10"}
+                value={reps} onChange={(e) => setReps(e.target.value)}
+                className="w-full h-10 text-center text-sm rounded-lg border border-border bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="text-[10px] text-muted-foreground">reps</span>
+            </div>
+            {!isBodyweight && (
+              <div className="flex flex-col items-center gap-1 flex-1">
+                <input
+                  type="number" inputMode="decimal" placeholder={String(item.weightKg ?? "")}
+                  value={weight} onChange={(e) => setWeight(e.target.value)}
+                  className="w-full h-10 text-center text-sm rounded-lg border border-border bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <span className="text-[10px] text-muted-foreground">kg</span>
+              </div>
+            )}
+            <button
+              onClick={handleLog}
+              className="h-10 px-3 rounded-lg bg-primary text-white text-xs font-semibold shrink-0"
+            >
+              Log
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Item Row ─────────────────────────────────────────────────────────────────
 
 function ItemRow({
   item,
   onToggle,
+  onUpdateItem,
 }: {
   item: DailyPlanItem;
   onToggle: (id: string, done: boolean) => void;
+  onUpdateItem: (id: string, updates: Partial<DailyPlanItem>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [note, setNote] = useState(item.partialNote || "");
@@ -150,13 +381,11 @@ function ItemRow({
 
       {expanded && (
         <div className="px-3 pb-3 pt-2 border-t border-border flex flex-col gap-2">
-          {/* Exercise details */}
-          {item.type === "exercise" && item.sets && (
-            <p className="text-xs text-muted-foreground">
-              {item.sets} sets × {item.reps}
-              {item.weightKg ? ` @ ${item.weightKg}kg` : ""}
-            </p>
+          {/* Exercise: target + actual performance logger */}
+          {item.type === "exercise" && (
+            <ExercisePerf item={item} onUpdateItem={onUpdateItem} />
           )}
+
           {/* Meal ingredients */}
           {item.type === "meal" && item.ingredients && item.ingredients.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -206,7 +435,7 @@ function ItemRow({
                   onClick={() => setEditing(true)}
                   className="flex items-center gap-1 text-xs text-muted-foreground"
                 >
-                  <Pencil size={12} /> Mark as partial / edit
+                  <Pencil size={12} /> Mark as partial / add note
                 </button>
               )}
             </div>
@@ -276,6 +505,14 @@ function WaterTracker({
 export default function TodayPage() {
   const [record, setRecord] = useState<DailyRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState("");
+
+  useEffect(() => {
+    fetch("/api/user")
+      .then((r) => r.json())
+      .then((u: UserProfile | null) => { if (u?.name) setUserName(u.name); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -283,7 +520,6 @@ export default function TodayPage() {
         const res = await fetch(`/api/daily/${today}`);
         const data = await res.json();
 
-        // If record exists but has no ingredients yet, force-regenerate (preserves ticks)
         const needsRefresh =
           !data?.items ||
           (data?.items?.length && data.items.filter((i: { type: string }) => i.type === "meal").every((i: { ingredients?: unknown[] }) => !i.ingredients?.length));
@@ -318,12 +554,20 @@ export default function TodayPage() {
     });
     setRecord((r) =>
       r
-        ? {
-            ...r,
-            items: r.items.map((i) =>
-              i.id === itemId ? { ...i, completed } : i
-            ),
-          }
+        ? { ...r, items: r.items.map((i) => i.id === itemId ? { ...i, completed } : i) }
+        : null
+    );
+  }
+
+  async function handleUpdateItem(itemId: string, updates: Partial<DailyPlanItem>) {
+    await fetch(`/api/daily/${today}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update_item", itemId, updates }),
+    });
+    setRecord((r) =>
+      r
+        ? { ...r, items: r.items.map((i) => i.id === itemId ? { ...i, ...updates } : i) }
         : null
     );
   }
@@ -378,6 +622,9 @@ export default function TodayPage() {
           </Card>
         ) : (
           <>
+            {/* Daily briefing */}
+            <DailyBriefing record={record} userName={userName} />
+
             {/* Progress ring */}
             {totalCount > 0 && (
               <div className="flex items-center gap-4 p-4 bg-card border border-border rounded-2xl">
@@ -417,7 +664,7 @@ export default function TodayPage() {
                   Meals
                 </h2>
                 {meals.map((item) => (
-                  <ItemRow key={item.id} item={item} onToggle={handleToggle} />
+                  <ItemRow key={item.id} item={item} onToggle={handleToggle} onUpdateItem={handleUpdateItem} />
                 ))}
               </div>
             )}
@@ -429,7 +676,7 @@ export default function TodayPage() {
                   Workout
                 </h2>
                 {exercises.map((item) => (
-                  <ItemRow key={item.id} item={item} onToggle={handleToggle} />
+                  <ItemRow key={item.id} item={item} onToggle={handleToggle} onUpdateItem={handleUpdateItem} />
                 ))}
               </div>
             )}

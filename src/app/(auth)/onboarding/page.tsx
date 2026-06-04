@@ -463,7 +463,7 @@ export default function OnboardingPage() {
         body: JSON.stringify({ date: new Date().toISOString().slice(0, 10) }),
       }).catch(() => { /* non-fatal — Today page will generate on load */ });
 
-      router.push("/today");
+      router.push("/welcome");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setGenerating(false);

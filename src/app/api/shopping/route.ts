@@ -18,10 +18,34 @@ async function getUserId(req: NextRequest) {
   });
 }
 
+function getWeekMonday(): string {
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diff);
+  return monday.toISOString().slice(0, 10);
+}
+
 export async function GET(req: NextRequest) {
   const userId = await getUserId(req);
   if (!userId) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+
   const list = await getActiveShoppingList(userId);
+
+  if (list) {
+    const currentWeekStart = getWeekMonday();
+    if (!list.weekStartDate || list.weekStartDate < currentWeekStart) {
+      const resetList = {
+        ...list,
+        weekStartDate: currentWeekStart,
+        items: list.items.map((i) => ({ ...i, bought: false })),
+      };
+      await saveShoppingList(resetList);
+      return NextResponse.json(resetList);
+    }
+  }
+
   return NextResponse.json(list);
 }
 

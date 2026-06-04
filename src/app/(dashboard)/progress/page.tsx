@@ -86,34 +86,41 @@ function WeightTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Log today&apos;s weight</CardTitle>
-            <div className="flex gap-1">
-              <button
-                onClick={() => setUnit("kg")}
-                className={cn("px-2.5 py-1 rounded-lg border text-xs font-medium transition-all",
-                  unit === "kg" ? "bg-primary border-primary text-white" : "border-border text-muted-foreground")}
-              >kg</button>
-              <button
-                onClick={() => setUnit("st")}
-                className={cn("px-2.5 py-1 rounded-lg border text-xs font-medium transition-all",
-                  unit === "st" ? "bg-primary border-primary text-white" : "border-border text-muted-foreground")}
-              >st·lbs</button>
-            </div>
-          </div>
-        </CardHeader>
-        <div className="flex gap-3">
+      <Card className="flex flex-col gap-4">
+        <div>
+          <p className="text-sm font-semibold">Log today&apos;s weight</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Track your progress over time</p>
+        </div>
+
+        <div className="flex gap-1 p-1 bg-muted rounded-xl w-fit">
+          <button
+            onClick={() => setUnit("kg")}
+            className={cn("px-4 py-2 rounded-lg text-xs font-semibold transition-all",
+              unit === "kg" ? "bg-white shadow-sm text-primary" : "text-muted-foreground")}
+          >kg</button>
+          <button
+            onClick={() => setUnit("st")}
+            className={cn("px-4 py-2 rounded-lg text-xs font-semibold transition-all",
+              unit === "st" ? "bg-white shadow-sm text-primary" : "text-muted-foreground")}
+          >st · lbs</button>
+        </div>
+
+        <div className="flex gap-2 items-end">
           {unit === "kg" ? (
-            <Input type="number" inputMode="decimal" placeholder="e.g. 74.5" value={newWeight}
-              onChange={(e) => setNewWeight(e.target.value)} hint="kg" className="flex-1" />
+            <Input type="number" inputMode="decimal" placeholder="74.5" value={newWeight}
+              onChange={(e) => setNewWeight(e.target.value)} className="flex-1" />
           ) : (
             <div className="flex gap-2 flex-1">
-              <Input type="number" inputMode="numeric" placeholder="11" value={stoneInput}
-                onChange={(e) => setStoneInput(e.target.value)} hint="st" className="flex-1" />
-              <Input type="number" inputMode="numeric" placeholder="5" value={lbsInput}
-                onChange={(e) => setLbsInput(e.target.value)} hint="lb" className="flex-1" />
+              <div className="flex flex-col gap-1 flex-1">
+                <p className="text-xs text-muted-foreground">Stones</p>
+                <Input type="number" inputMode="numeric" placeholder="11" value={stoneInput}
+                  onChange={(e) => setStoneInput(e.target.value)} />
+              </div>
+              <div className="flex flex-col gap-1 flex-1">
+                <p className="text-xs text-muted-foreground">Pounds</p>
+                <Input type="number" inputMode="numeric" placeholder="5" value={lbsInput}
+                  onChange={(e) => setLbsInput(e.target.value)} />
+              </div>
             </div>
           )}
           <Button onClick={handleLog} loading={saving} disabled={!canLog} size="md" className="shrink-0">Log</Button>
@@ -299,6 +306,7 @@ function StrengthTab() {
 function ProjectionsTab() {
   const [user, setUser] = useState<{ weightKg: number; targetWeightKg?: number; goal: string; workoutDays: number[] } | null>(null);
   const [weights, setWeights] = useState<WeightEntry[]>([]);
+  const [projUnit, setProjUnit] = useState<"kg" | "st">("kg");
 
   useEffect(() => {
     Promise.all([
@@ -316,14 +324,16 @@ function ProjectionsTab() {
   const target = user.targetWeightKg;
   const weeklyWorkouts = user.workoutDays?.length || 3;
 
-  // Simple projection: ~400 kcal deficit/surplus → ~0.37 kg/week
   const weeklyChangeKg =
     user.goal === "lose_weight" ? -0.37 :
     user.goal === "build_muscle" ? 0.15 : 0;
 
+  // Round to 2dp to eliminate floating-point noise (e.g. 72.59999999)
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
   const projections = [4, 8, 12].map((weeks) => ({
     weeks,
-    weight: Math.max(30, currentWeight + weeklyChangeKg * weeks),
+    weight: round2(Math.max(30, currentWeight + weeklyChangeKg * weeks)),
   }));
 
   const weeksToGoal =
@@ -331,23 +341,66 @@ function ProjectionsTab() {
       ? Math.abs((target - currentWeight) / weeklyChangeKg)
       : null;
 
-  const totalCalsBurned = weeklyWorkouts * 52 * 300; // ~300 kcal per session estimate
+  const totalCalsBurned = weeklyWorkouts * 52 * 300;
+
+  function toDisplayUnit(kg: number): number {
+    return projUnit === "kg" ? round2(kg) : round2(kg / 6.35029);
+  }
+
+  function displayW(kg: number): string {
+    return projUnit === "kg" ? formatWeight(kg) : formatWeightSt(kg);
+  }
+
+  const chartYUnit = projUnit === "kg" ? "kg" : "st";
+  const chartData = [
+    { label: "Now", weight: toDisplayUnit(currentWeight) },
+    ...projections.map((p) => ({ label: `${p.weeks}w`, weight: toDisplayUnit(p.weight) })),
+  ];
 
   return (
     <div className="flex flex-col gap-4">
       {/* Projections chart */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Target size={16} className="text-primary" /> Weight projections</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Target size={16} className="text-primary" /> Weight projections
+            </CardTitle>
+            <div className="flex gap-1 p-1 bg-muted rounded-lg">
+              <button
+                onClick={() => setProjUnit("kg")}
+                className={cn("px-2.5 py-1 rounded text-xs font-semibold transition-all",
+                  projUnit === "kg" ? "bg-white shadow-sm text-primary" : "text-muted-foreground")}
+              >kg</button>
+              <button
+                onClick={() => setProjUnit("st")}
+                className={cn("px-2.5 py-1 rounded text-xs font-semibold transition-all",
+                  projUnit === "st" ? "bg-white shadow-sm text-primary" : "text-muted-foreground")}
+              >st</button>
+            </div>
+          </div>
         </CardHeader>
         {weeklyChangeKg !== 0 ? (
           <>
             <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={[{ label: "Now", weight: currentWeight }, ...projections.map((p) => ({ label: `${p.weeks}w`, weight: p.weight }))]}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-                <YAxis domain={["dataMin - 2", "dataMax + 2"]} tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} width={35} unit="kg" />
-                <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }} />
+                <YAxis
+                  domain={["dataMin - 1", "dataMax + 1"]}
+                  tick={{ fontSize: 10, fill: "#6b7280" }}
+                  axisLine={false} tickLine={false} width={40}
+                  tickFormatter={(v: number) => v.toFixed(1)}
+                  unit={chartYUnit}
+                />
+                <Tooltip
+                  contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12 }}
+                  formatter={(v: unknown) => {
+                    const n = typeof v === "number" ? v : Number(v);
+                    const kg = projUnit === "kg" ? n : n * 6.35029;
+                    return [displayW(kg), "Weight"];
+                  }}
+                />
                 <Line type="monotone" dataKey="weight" stroke="#f97316" strokeWidth={2} strokeDasharray="6 3" dot={{ fill: "#f97316", r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -355,7 +408,7 @@ function ProjectionsTab() {
               {projections.map((p) => (
                 <div key={p.weeks} className="flex-1 text-center bg-muted rounded-xl p-2.5">
                   <p className="text-xs text-muted-foreground">{p.weeks} weeks</p>
-                  <p className="font-bold text-sm">{p.weight.toFixed(1)} kg</p>
+                  <p className="font-bold text-sm">{displayW(p.weight)}</p>
                 </div>
               ))}
             </div>
@@ -368,7 +421,7 @@ function ProjectionsTab() {
       {/* Target */}
       {target && weeksToGoal && (
         <Card className="text-center">
-          <p className="text-xs text-muted-foreground mb-1">Estimated time to reach {formatWeight(target)}</p>
+          <p className="text-xs text-muted-foreground mb-1">Estimated time to reach {displayW(target)}</p>
           <p className="text-3xl font-bold text-primary">{Math.ceil(weeksToGoal)}</p>
           <p className="text-xs text-muted-foreground">weeks at current pace</p>
         </Card>
@@ -378,7 +431,11 @@ function ProjectionsTab() {
       <div className="flex gap-3">
         <Card className="flex-1 text-center">
           <p className="text-xs text-muted-foreground mb-1">Weekly change</p>
-          <p className="text-xl font-bold">{weeklyChangeKg > 0 ? "+" : ""}{weeklyChangeKg.toFixed(2)} kg</p>
+          <p className="text-xl font-bold">
+            {projUnit === "kg"
+              ? `${weeklyChangeKg > 0 ? "+" : ""}${weeklyChangeKg.toFixed(2)} kg`
+              : `${(weeklyChangeKg * 2.20462) > 0 ? "+" : ""}${(weeklyChangeKg * 2.20462).toFixed(1)} lb`}
+          </p>
         </Card>
         <Card className="flex-1 text-center">
           <p className="text-xs text-muted-foreground mb-1">Annual cal burn</p>

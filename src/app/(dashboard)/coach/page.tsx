@@ -5,6 +5,57 @@ import Header from "@/components/layout/Header";
 import { cn } from "@/lib/utils";
 import { Send, Bot, User } from "lucide-react";
 
+// ─── Simple markdown renderer ─────────────────────────────────────────────────
+
+function renderInline(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
+function MarkdownText({ content }: { content: string }) {
+  const lines = content.split("\n");
+  const nodes: React.ReactNode[] = [];
+  const bullets: string[] = [];
+
+  function flushBullets() {
+    if (!bullets.length) return;
+    nodes.push(
+      <ul key={nodes.length} className="mt-1.5 space-y-1">
+        {bullets.map((b, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full bg-current opacity-50" />
+            <span>{renderInline(b)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+    bullets.length = 0;
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushBullets();
+    } else if (/^[•\-\*]\s/.test(trimmed)) {
+      bullets.push(trimmed.replace(/^[•\-\*]\s/, ""));
+    } else {
+      flushBullets();
+      nodes.push(
+        <p key={nodes.length} className={nodes.length > 0 ? "mt-2" : ""}>
+          {renderInline(trimmed)}
+        </p>
+      );
+    }
+  }
+  flushBullets();
+
+  return <div className="text-sm leading-relaxed">{nodes}</div>;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -128,13 +179,17 @@ export default function CoachPage() {
             )}
             <div
               className={cn(
-                "max-w-[80%] px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap",
+                "max-w-[80%] px-4 py-3 rounded-2xl",
                 msg.role === "user"
-                  ? "bg-primary text-white rounded-br-sm"
+                  ? "bg-primary text-white rounded-br-sm text-sm"
                   : "bg-white border border-border rounded-bl-sm"
               )}
             >
-              {msg.content}
+              {msg.role === "assistant" ? (
+                <MarkdownText content={msg.content} />
+              ) : (
+                <span className="text-sm whitespace-pre-wrap">{msg.content}</span>
+              )}
               {streaming && i === messages.length - 1 && msg.role === "assistant" && !msg.content && (
                 <span className="inline-flex gap-1">
                   {[0, 1, 2].map((j) => (

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAuthSession } from "aws-amplify/auth/server";
 import { runWithAmplifyServerContext } from "@/lib/auth/amplify-server";
 
-const PROTECTED = ["/today", "/workout", "/nutrition", "/progress", "/shopping", "/onboarding", "/settings", "/coach"];
+const PROTECTED = ["/today", "/workout", "/nutrition", "/progress", "/shopping", "/onboarding", "/settings", "/coach", "/welcome"];
 const AUTH_ONLY = ["/login", "/signup"];
 
 export async function proxy(request: NextRequest) {

@@ -22,6 +22,9 @@ export interface DailyPlanItem {
   sets?: number;
   reps?: string;
   weightKg?: number;
+  actualSets?: number;
+  actualReps?: string;
+  actualWeightKg?: number;
 }
 
 export interface DailyRecord {
@@ -63,6 +66,51 @@ export async function toggleItemComplete(
   const items = record.items.map((item) =>
     item.id === itemId ? { ...item, completed, partialNote } : item
   );
+
+  await db.send(
+    new UpdateCommand({
+      TableName: Tables.daily,
+      Key: { userId, date },
+      UpdateExpression: "SET #items = :items",
+      ExpressionAttributeNames: { "#items": "items" },
+      ExpressionAttributeValues: { ":items": items },
+    })
+  );
+}
+
+export async function updateDailyItem(
+  userId: string,
+  date: string,
+  itemId: string,
+  updates: Partial<DailyPlanItem>
+): Promise<void> {
+  const record = await getDailyRecord(userId, date);
+  if (!record) return;
+
+  const items = record.items.map((item) =>
+    item.id === itemId ? { ...item, ...updates } : item
+  );
+
+  await db.send(
+    new UpdateCommand({
+      TableName: Tables.daily,
+      Key: { userId, date },
+      UpdateExpression: "SET #items = :items",
+      ExpressionAttributeNames: { "#items": "items" },
+      ExpressionAttributeValues: { ":items": items },
+    })
+  );
+}
+
+export async function addDailyItem(
+  userId: string,
+  date: string,
+  item: DailyPlanItem
+): Promise<void> {
+  const record = await getDailyRecord(userId, date);
+  if (!record) return;
+
+  const items = [...record.items, item];
 
   await db.send(
     new UpdateCommand({
