@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { signOut } from "aws-amplify/auth";
 import Header from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -11,7 +11,6 @@ import type { UserProfile } from "@/types";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [resetting, setResetting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -19,7 +18,12 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [user, setUser] = useState<UserProfile | null>(null);
   const [upgradingBilling, setUpgradingBilling] = useState(false);
-  const justUpgraded = searchParams.get("upgraded") === "1";
+  const [justUpgraded, setJustUpgraded] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setJustUpgraded(params.get("upgraded") === "1");
+  }, []);
 
   useEffect(() => {
     fetch("/api/user").then((r) => r.json()).then(setUser).catch(() => {});
