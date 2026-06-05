@@ -42,7 +42,10 @@ export async function POST(req: NextRequest) {
     payment_method_types: ["card"],
     line_items: [{ price: process.env.STRIPE_PREMIUM_PRICE_ID!, quantity: 1 }],
     mode: "subscription",
-    subscription_data: { metadata: { userId } },
+    subscription_data: {
+      metadata: { userId },
+      description: "The Newbie Premium",
+    },
     success_url: `${appUrl}/settings?upgraded=1`,
     cancel_url: `${appUrl}/settings`,
   });
