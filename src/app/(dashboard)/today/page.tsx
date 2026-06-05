@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { format } from "date-fns";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
@@ -22,7 +22,6 @@ import {
 import type { DailyRecord, DailyPlanItem } from "@/lib/db/daily";
 import { formatIngredient } from "@/lib/formatIngredient";
 import type { UserProfile } from "@/types";
-import { useRef } from "react";
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
