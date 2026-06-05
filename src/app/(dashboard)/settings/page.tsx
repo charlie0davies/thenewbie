@@ -126,7 +126,7 @@ export default function SettingsPage() {
                 ))}
               </div>
               <Button size="md" onClick={handleUpgrade} loading={upgradingBilling} className="w-full">
-                Upgrade to Premium — £6.99/month
+                Upgrade to Premium — £2.99/month
               </Button>
             </div>
           )}
